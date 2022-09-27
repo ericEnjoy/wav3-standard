@@ -3,16 +3,15 @@ module wav3::NFT {
     use std::error;
     use std::signer;
     use std::string::{Self, String};
-    use std::vector;
-    use std::option::{Self, Option};
+    use std::bcs::{to_bytes};
+    use std::option;
 
     use aptos_framework::block;
-    use aptos_framework::event::{Self, EventHandle};
-    use aptos_framework::account;
-    use aptos_framework::timestamp;
+//    use aptos_framework::event::{Self, EventHandle};
+    use aptos_std::simple_map::{Self, SimpleMap};
+    use aptos_std::from_bcs;
     use aptos_std::table::{Self, Table};
-    use aptos_token::property_map::{Self, PropertyMap};
-    use aptos_token::token;
+    use aptos_token::token::{Self, TokenDataId, TokenMutabilityConfig};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
     const EIMAGE_URI_TOO_LONG: u64 = 2;
@@ -23,17 +22,20 @@ module wav3::NFT {
     const ENOT_A_MULTI_EDITION: u64 = 7;
     const ESOCIAL_MEDIA_ALREADY_REGISTER: u64 = 8;
     const ESOCIAL_MEDIA_NOT_REGISTER: u64 = 9;
+    const ECOLLECTIONS_NOT_PUBLISHED: u64 = 10;
+
+    const MAX_URI_LENGTH: u64 = 512;
 
     struct CollectionExtend has store {
         social_media: SimpleMap<String, String>,
-        symbol: string,
-        image_uri: string,
-        animation_uri: string,
-        website: string,
+        symbol: String,
+        image_uri: String,
+        animation_uri: String,
+        website: String,
         standard_version: u64,
-        commercial_standard: string,
+        commercial_standard: String,
         update_block_height: u64,
-        royalty_policy: string,
+        royalty_policy: String,
         multi_edtion: bool
     }
 
@@ -66,9 +68,9 @@ module wav3::NFT {
         animation_uri: String,
         website: String,
         standard_version: u64,
-        commercial_standard: string,
+        commercial_standard: String,
         update_block_height: u64,
-        royalty_policy: string,
+        royalty_policy: String,
         multi_edtion: bool
     ) acquires Collections {
         let account_addr = signer::address_of(creator);
@@ -87,18 +89,18 @@ module wav3::NFT {
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
         );
 
-        let uri = get_collection_uri(account_addr, collection);
+        let uri = get_collection_uri(account_addr, name);
         token::create_collection(creator, name, description, uri, maximum, mutate_setting);
 
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
-        assert!(string::length(&animation_url) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
+        assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
         assert!(string::length(&website) <= MAX_URI_LENGTH, error::invalid_argument(EWEBSITE_URI_TOO_LONG));
 
         table::add(collection_extend_data, name, CollectionExtend {
             social_media: simple_map::create<String, String>(),
             symbol,
             image_uri,
-            animationri,
+            animation_uri,
             website,
             standard_version,
             commercial_standard,
@@ -125,7 +127,6 @@ module wav3::NFT {
         animation_uri: String,
         image_checksum: u64,
         mutability_config: MutabilityConfig,
-        update_block_height: u64
     ) acquires Collections {
         let account_addr = signer::address_of(account);
         assert!(
@@ -150,7 +151,7 @@ module wav3::NFT {
         );
         let collections = borrow_global_mut<Collections>(account_addr);
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
-        assert!(string::length(&animation_url) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
+        assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
         assert!(
             table::contains(&collections.collection_extend_data, name),
             error::already_exists(ECOLLECTION_NOT_PUBLISHED),
@@ -178,16 +179,17 @@ module wav3::NFT {
         let addr = signer::address_of(account);
         let token_data_id = token::create_token_data_id(addr, collection_name, token_name);
         let collections = borrow_global<Collections>(addr);
-        let collection_extend_data = table::borrow(collections.collection_extend_data, collection_name);
+        let collection_extend_data = table::borrow(& collections.collection_extend_data, collection_name);
         if (!collection_extend_data.multi_edtion) {
-            let cur_supply =token::get_token_supply(addr, token_data_id);
-            assert!(cur_supply <= 1, ENOT_A_MULTI_EDITION);
+            let res_opt =token::get_token_supply(addr, token_data_id);
+            let cur_supply = option::extract(&mut res_opt);
+            assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
         let token_id = token::mint_token(account, token_data_id, 1);
-        let keys = vector[b"properties"]; 
+        let keys = vector<String>[string::utf8(b"properties")];
         let values = vector[*string::bytes(&properties)];
-        let types = vector[b"string"];
-        let token_id = mutate_one_token(
+        let types = vector<String>[string::utf8(b"string")];
+        let _token_id = token::mutate_one_token(
             account,
             addr,
             token_id,
@@ -206,7 +208,7 @@ module wav3::NFT {
         let addr = signer::address_of(account);
         let collections = borrow_global_mut<Collections>(addr);
         let collection_extend_data = table::borrow_mut(
-            collections.collection_extend_data, collection
+            &mut  collections.collection_extend_data, collection
         );
         assert!(
             !simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
@@ -215,7 +217,6 @@ module wav3::NFT {
         simple_map::add(&mut collection_extend_data.social_media, social_media_type, social_media);
     }
 
-    //TODO: updat social media 
     public fun update_social_media(
         account: &signer,
         collection: String,
@@ -225,13 +226,16 @@ module wav3::NFT {
         let addr = signer::address_of(account);
         let collections = borrow_global_mut<Collections>(addr);
         let collection_extend_data = table::borrow_mut(
-            collections.collection_extend_data, collection
+            &mut collections.collection_extend_data, collection
         );
         assert!(
             simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
             ESOCIAL_MEDIA_NOT_REGISTER
         );
-        let social_meida_ref = simple_map::borrow_mut(&mut collection_extend_data.social_media, social_media_type);
+        let social_meida_ref = simple_map::borrow_mut(
+            &mut collection_extend_data.social_media,
+            &social_media_type
+        );
         *social_meida_ref = social_media;
     }
 
