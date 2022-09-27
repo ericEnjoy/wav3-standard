@@ -20,6 +20,9 @@ module wav3::NFT {
     const EWEBSITE_URI_TOO_LONG: u64 = 4;
     const ETOKEN_DATA_ALREADY_EXISTS: u64 = 5;
     const ECOLLECTION_NOT_PUBLISHED: u64 = 6;
+    const ENOT_A_MULTI_EDITION: u64 = 7;
+    const ESOCIAL_MEDIA_ALREADY_REGISTER: u64 = 8;
+    const ESOCIAL_MEDIA_NOT_REGISTER: u64 = 9;
 
     struct CollectionExtend has store {
         social_media: SimpleMap<String, String>,
@@ -30,7 +33,8 @@ module wav3::NFT {
         standard_version: u64,
         commercial_standard: string,
         update_block_height: u64,
-        royalty_policy: string
+        royalty_policy: string,
+        multi_edtion: bool
     }
 
     struct TokenDataExtend has store {
@@ -64,7 +68,8 @@ module wav3::NFT {
         standard_version: u64,
         commercial_standard: string,
         update_block_height: u64,
-        royalty_policy: string
+        royalty_policy: string,
+        multi_edtion: bool
     ) acquires Collections {
         let account_addr = signer::address_of(creator);
         if (!exists<Collections>(account_addr)) {
@@ -82,8 +87,7 @@ module wav3::NFT {
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
         );
 
-        // TODO: construct collection uri in token.move
-        let uri = 
+        let uri = get_collection_uri(account_addr, collection);
         token::create_collection(creator, name, description, uri, maximum, mutate_setting);
 
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
@@ -99,7 +103,8 @@ module wav3::NFT {
             standard_version,
             commercial_standard,
             update_block_height,
-            royalty_policy
+            royalty_policy,
+            multi_edtion
         });
     }
 
@@ -127,19 +132,21 @@ module wav3::NFT {
             exists<Collections>(account_addr),
             error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
         );
+        let uri = get_token_uri(account_addr, collection, name);
         let token_data_id = token::create_tokendata(
-            account: &signer,
-            collection: String,
-            name: String,
-            description: String,
-            maximum: u64,
-            royalty_payee_address: address,
-            royalty_points_denominator: u64,
-            royalty_points_numerator: u64,
-            token_mutate_config: TokenMutabilityConfig,
-            property_keys: vector<String>,
-            property_values: vector<vector<u8>>,
-            property_types: vector<String>,
+            account,
+            collection,
+            name,
+            description,
+            maximum,
+            uri,
+            royalty_payee_address,
+            royalty_points_denominator,
+            royalty_points_numerator,
+            token_mutate_config,
+            property_keys,
+            property_values,
+            property_types,
         );
         let collections = borrow_global_mut<Collections>(account_addr);
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
@@ -162,13 +169,91 @@ module wav3::NFT {
         });
     }
 
-    public fun mint_token() {
-        
+    public fun mint_nft(
+        account: &signer,
+        collection_name: String,
+        token_name: String,
+        properties: String
+    ) acquires Collections {
+        let addr = signer::address_of(account);
+        let token_data_id = token::create_token_data_id(addr, collection_name, token_name);
+        let collections = borrow_global<Collections>(addr);
+        let collection_extend_data = table::borrow(collections.collection_extend_data, collection_name);
+        if (!collection_extend_data.multi_edtion) {
+            let cur_supply =token::get_token_supply(addr, token_data_id);
+            assert!(cur_supply <= 1, ENOT_A_MULTI_EDITION);
+        };
+        let token_id = token::mint_token(account, token_data_id, 1);
+        let keys = vector[b"properties"]; 
+        let values = vector[*string::bytes(&properties)];
+        let types = vector[b"string"];
+        let token_id = mutate_one_token(
+            account,
+            addr,
+            token_id,
+            keys,
+            values,
+            types
+        );
     }
 
-    public fun burn() {
-
+    public fun add_social_media(
+        account: &signer,
+        collection: String,
+        social_media_type: String,
+        social_media: String
+    ) acquires Collections {
+        let addr = signer::address_of(account);
+        let collections = borrow_global_mut<Collections>(addr);
+        let collection_extend_data = table::borrow_mut(
+            collections.collection_extend_data, collection
+        );
+        assert!(
+            !simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
+            ESOCIAL_MEDIA_ALREADY_REGISTER
+        );
+        simple_map::add(&mut collection_extend_data.social_media, social_media_type, social_media);
     }
 
-    public fun add_social_media() {}
+    //TODO: updat social media 
+    public fun update_social_media(
+        account: &signer,
+        collection: String,
+        social_media_type: String,
+        social_media: String
+    ) acquires Collections {
+        let addr = signer::address_of(account);
+        let collections = borrow_global_mut<Collections>(addr);
+        let collection_extend_data = table::borrow_mut(
+            collections.collection_extend_data, collection
+        );
+        assert!(
+            simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
+            ESOCIAL_MEDIA_NOT_REGISTER
+        );
+        let social_meida_ref = simple_map::borrow_mut(&mut collection_extend_data.social_media, social_media_type);
+        *social_meida_ref = social_media;
+    }
+
+    fun get_collection_uri(creator: address, collection: String): String {
+        let addr_vec_out = to_bytes(&creator);
+        let addr_string = from_bcs::to_string(addr_vec_out);
+        let uri = string::utf8(b"nft://");
+        string::append(&mut uri, addr_string);
+        string::append(&mut uri, string::utf8(b"/"));
+        string::append(&mut uri, collection);
+        uri
+    }
+
+    fun get_token_uri(creator: address, collection: String, token_name: String): String {
+        let addr_vec_out = to_bytes(&creator);
+        let addr_string = from_bcs::to_string(addr_vec_out);
+        let uri = string::utf8(b"nft://");
+        string::append(&mut uri, addr_string);
+        string::append(&mut uri, string::utf8(b"/"));
+        string::append(&mut uri, collection);
+        string::append(&mut uri, string::utf8(b"/"));
+        string::append(&mut uri, token_name);
+        uri
+    }
 }
