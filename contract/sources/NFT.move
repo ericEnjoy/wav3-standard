@@ -3,15 +3,14 @@ module wav3::NFT {
     use std::error;
     use std::signer;
     use std::string::{Self, String};
-    use std::bcs::{to_bytes};
     use std::option;
+    use std::vector;
 
     use aptos_framework::block;
-//    use aptos_framework::event::{Self, EventHandle};
+    use aptos_framework::account;
     use aptos_std::simple_map::{Self, SimpleMap};
-    use aptos_std::from_bcs;
     use aptos_std::table::{Self, Table};
-    use aptos_token::token::{Self, TokenDataId, TokenMutabilityConfig};
+    use aptos_token::token::{Self, TokenDataId};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
     const EIMAGE_URI_TOO_LONG: u64 = 2;
@@ -23,6 +22,7 @@ module wav3::NFT {
     const ESOCIAL_MEDIA_ALREADY_REGISTER: u64 = 8;
     const ESOCIAL_MEDIA_NOT_REGISTER: u64 = 9;
     const ECOLLECTIONS_NOT_PUBLISHED: u64 = 10;
+    const EUTF_CONVERT_ERROR: u64 = 11;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -57,7 +57,7 @@ module wav3::NFT {
         token_extend_data: Table<TokenDataId, TokenDataExtend>
     }
 
-    public fun create_collection(        
+    public entry fun create_collection(
         creator: &signer,
         name: String,
         description: String,
@@ -69,7 +69,6 @@ module wav3::NFT {
         website: String,
         standard_version: u64,
         commercial_standard: String,
-        update_block_height: u64,
         royalty_policy: String,
         multi_edtion: bool
     ) acquires Collections {
@@ -104,13 +103,13 @@ module wav3::NFT {
             website,
             standard_version,
             commercial_standard,
-            update_block_height,
+            update_block_height: block::get_current_block_height(),
             royalty_policy,
             multi_edtion
         });
     }
 
-    public fun create_tokendata(
+    public entry fun create_tokendata(
         account: &signer,
         collection: String,
         name: String,
@@ -119,14 +118,14 @@ module wav3::NFT {
         royalty_payee_address: address,
         royalty_points_denominator: u64,
         royalty_points_numerator: u64,
-        token_mutate_config: TokenMutabilityConfig,
+        token_mutate_config_vec: vector<bool>,
         property_keys: vector<String>,
         property_values: vector<vector<u8>>,
         property_types: vector<String>,
         image_uri: String,
         animation_uri: String,
         image_checksum: u64,
-        mutability_config: MutabilityConfig,
+        mutability_config_vec: vector<bool>,
     ) acquires Collections {
         let account_addr = signer::address_of(account);
         assert!(
@@ -134,6 +133,7 @@ module wav3::NFT {
             error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
         );
         let uri = get_token_uri(account_addr, collection, name);
+        let token_mutate_config = token::create_token_mutability_config(&token_mutate_config_vec);
         let token_data_id = token::create_tokendata(
             account,
             collection,
@@ -160,6 +160,7 @@ module wav3::NFT {
             !table::contains(&collections.token_extend_data, token_data_id),
             error::already_exists(ETOKEN_DATA_ALREADY_EXISTS),
         );
+        let mutability_config = create_token_mutability_config(mutability_config_vec);
 
         table::add(&mut collections.token_extend_data, token_data_id, TokenDataExtend {
             image_uri,
@@ -170,7 +171,7 @@ module wav3::NFT {
         });
     }
 
-    public fun mint_nft(
+    public entry fun mint_nft(
         account: &signer,
         collection_name: String,
         token_name: String,
@@ -217,6 +218,13 @@ module wav3::NFT {
         simple_map::add(&mut collection_extend_data.social_media, social_media_type, social_media);
     }
 
+    public fun create_token_mutability_config(mutability_vec: vector<bool>): MutabilityConfig {
+        let image_uri_update = vector::pop_back(&mut mutability_vec);
+        MutabilityConfig {
+            image_uri: image_uri_update
+        }
+    }
+
     public fun update_social_media(
         account: &signer,
         collection: String,
@@ -240,8 +248,7 @@ module wav3::NFT {
     }
 
     fun get_collection_uri(creator: address, collection: String): String {
-        let addr_vec_out = to_bytes(&creator);
-        let addr_string = from_bcs::to_string(addr_vec_out);
+        let addr_string = address_to_string(creator);
         let uri = string::utf8(b"nft://");
         string::append(&mut uri, addr_string);
         string::append(&mut uri, string::utf8(b"/"));
@@ -250,8 +257,7 @@ module wav3::NFT {
     }
 
     fun get_token_uri(creator: address, collection: String, token_name: String): String {
-        let addr_vec_out = to_bytes(&creator);
-        let addr_string = from_bcs::to_string(addr_vec_out);
+        let addr_string = address_to_string(creator);
         let uri = string::utf8(b"nft://");
         string::append(&mut uri, addr_string);
         string::append(&mut uri, string::utf8(b"/"));
@@ -259,5 +265,57 @@ module wav3::NFT {
         string::append(&mut uri, string::utf8(b"/"));
         string::append(&mut uri, token_name);
         uri
+    }
+
+    fun address_to_string(addr: address): String {
+        let authentication_vec = account::get_authentication_key(addr);
+        let address_utf8_vec = vector::empty<u8>();
+        let i = 0;
+        while(i < 32) {
+            let val = *vector::borrow(&authentication_vec, i);
+            let high_4 = val >> 4;
+            let low_4 = val << 4 >> 4;
+            vector::push_back(&mut address_utf8_vec, hex_to_utf8(high_4));
+            vector::push_back(&mut address_utf8_vec, hex_to_utf8(low_4));
+            i = i + 1;
+        };
+        string::utf8(address_utf8_vec)
+    }
+
+    fun hex_to_utf8(num: u8): u8 {
+        assert!(num < 16, error::invalid_argument(EUTF_CONVERT_ERROR));
+        if (num == 0) {
+            48
+        } else if (num == 1) {
+            49
+        } else if (num == 2) {
+            50
+        } else if (num == 3) {
+            51
+        } else if (num == 4) {
+            52
+        } else if (num == 5) {
+            53
+        } else if (num == 6) {
+            54
+        } else if (num == 7) {
+            55
+        } else if (num == 8) {
+            56
+        } else if (num == 9) {
+            57
+        } else if (num == 10) {
+            97
+        } else if (num == 11) {
+            98
+        } else if (num == 12) {
+            99
+        } else if (num == 13) {
+            100
+        } else if (num == 14) {
+            101
+        } else {
+            102
+        }
     }
 }
