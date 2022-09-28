@@ -1,7 +1,7 @@
 # NFT standard
 
 The standard is an extension of the token contract in the Aptos framework to provide a richer ecosystem for Aptos NFT.
-The extensions will be done in two parts, one is the collection, and the other is the token.<br><img src='image/image.png' width='1000'>
+The extensions will be done in two parts, one is the collection, and the other is the token.<br><img src='image/image.png' width='1000px'>
 # Collections
 
 The standard extension is based on [token.move](https://github.com/aptos-labs/aptos-core/blob/main/aptos-move/framework/aptos-token/sources/token.move) in aptos-token.
