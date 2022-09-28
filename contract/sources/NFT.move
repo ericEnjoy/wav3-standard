@@ -153,7 +153,7 @@ module wav3::NFT {
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
         assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
         assert!(
-            table::contains(&collections.collection_extend_data, name),
+            table::contains(&collections.collection_extend_data, collection),
             error::already_exists(ECOLLECTION_NOT_PUBLISHED),
         );
         assert!(
@@ -200,7 +200,7 @@ module wav3::NFT {
         );
     }
 
-    public fun add_social_media(
+    public entry fun add_social_media(
         account: &signer,
         collection: String,
         social_media_type: String,
@@ -225,7 +225,7 @@ module wav3::NFT {
         }
     }
 
-    public fun update_social_media(
+    public entry fun update_social_media(
         account: &signer,
         collection: String,
         social_media_type: String,
