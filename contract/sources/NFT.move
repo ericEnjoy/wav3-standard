@@ -11,6 +11,7 @@ module wav3::NFT {
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
+    use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
     const EIMAGE_URI_TOO_LONG: u64 = 2;
@@ -23,6 +24,7 @@ module wav3::NFT {
     const ESOCIAL_MEDIA_NOT_REGISTER: u64 = 9;
     const ECOLLECTIONS_NOT_PUBLISHED: u64 = 10;
     const EUTF_CONVERT_ERROR: u64 = 11;
+    const EPURE_NFT: u64 = 12;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -36,7 +38,8 @@ module wav3::NFT {
         commercial_standard: String,
         update_block_height: u64,
         royalty_policy: String,
-        multi_edtion: bool
+        multi_edtion: bool,
+        init_pure: bool
     }
 
     struct TokenDataExtend has store {
@@ -57,6 +60,10 @@ module wav3::NFT {
         token_extend_data: Table<TokenDataId, TokenDataExtend>
     }
 
+    struct ResourceAccountCap has key {
+        cap: account::SignerCapability
+    }
+
     public entry fun create_collection(
         creator: &signer,
         name: String,
@@ -70,26 +77,22 @@ module wav3::NFT {
         standard_version: u64,
         commercial_standard: String,
         royalty_policy: String,
-        multi_edtion: bool
-    ) acquires Collections {
+        multi_edtion: bool,
+        init_pure: bool
+    ) acquires Collections, ResourceAccountCap {
+        init_creator(creator);
         let account_addr = signer::address_of(creator);
-        if (!exists<Collections>(account_addr)) {
-            move_to(
-                creator,
-                Collections{
-                    collection_extend_data: table::new(),
-                    token_extend_data: table::new(),
-                },
-            )
-        };
-        let collection_extend_data = &mut borrow_global_mut<Collections>(account_addr).collection_extend_data;
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collection_extend_data =
+            &mut borrow_global_mut<Collections>(resource_account).collection_extend_data;
         assert!(
             !table::contains(collection_extend_data, name),
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
         );
 
-        let uri = get_collection_uri(account_addr, name);
-        token::create_collection(creator, name, description, uri, maximum, mutate_setting);
+        let uri = get_collection_uri(resource_account, name);
+        token::create_collection(&resource_account_signer, name, description, uri, maximum, mutate_setting);
 
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
         assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
@@ -105,8 +108,38 @@ module wav3::NFT {
             commercial_standard,
             update_block_height: block::get_current_block_height(),
             royalty_policy,
-            multi_edtion
+            multi_edtion,
+            init_pure
         });
+    }
+
+    fun get_resource_account_signer(market_address: address): signer acquires ResourceAccountCap {
+        let resource_account_cap = borrow_global<ResourceAccountCap>(market_address);
+        let resource_signer_from_cap = create_signer_with_capability(&resource_account_cap.cap);
+        resource_signer_from_cap
+    }
+
+    fun init_creator(
+        creator: &signer,
+    ) acquires ResourceAccountCap {
+        let account_addr = signer::address_of(creator);
+        if (!exists<ResourceAccountCap>(account_addr)) {
+            let (account_signer, cap) = account::create_resource_account(creator, x"01");
+            move_to(creator, ResourceAccountCap{
+                cap
+            });
+            token::initialize_token_store(&account_signer);
+        };
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        if (!exists<Collections>(signer::address_of(&resource_account_signer))) {
+            move_to(
+                &resource_account_signer,
+                Collections{
+                    collection_extend_data: table::new(),
+                    token_extend_data: table::new(),
+                },
+            )
+        };
     }
 
     public entry fun create_tokendata(
@@ -126,16 +159,18 @@ module wav3::NFT {
         animation_uri: String,
         image_checksum: u64,
         mutability_config_vec: vector<bool>,
-    ) acquires Collections {
+    ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
         assert!(
-            exists<Collections>(account_addr),
+            exists<Collections>(resource_account),
             error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
         );
-        let uri = get_token_uri(account_addr, collection, name);
+        let uri = get_token_uri(resource_account, collection, name);
         let token_mutate_config = token::create_token_mutability_config(&token_mutate_config_vec);
         let token_data_id = token::create_tokendata(
-            account,
+            &resource_account_signer,
             collection,
             name,
             description,
@@ -149,7 +184,7 @@ module wav3::NFT {
             property_values,
             property_types,
         );
-        let collections = borrow_global_mut<Collections>(account_addr);
+        let collections = borrow_global_mut<Collections>(resource_account);
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
         assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
         assert!(
@@ -176,23 +211,25 @@ module wav3::NFT {
         collection_name: String,
         token_name: String,
         properties: String
-    ) acquires Collections {
-        let addr = signer::address_of(account);
-        let token_data_id = token::create_token_data_id(addr, collection_name, token_name);
-        let collections = borrow_global<Collections>(addr);
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let collections = borrow_global<Collections>(resource_account);
         let collection_extend_data = table::borrow(& collections.collection_extend_data, collection_name);
         if (!collection_extend_data.multi_edtion) {
-            let res_opt =token::get_token_supply(addr, token_data_id);
+            let res_opt =token::get_token_supply(resource_account, token_data_id);
             let cur_supply = option::extract(&mut res_opt);
             assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
-        let token_id = token::mint_token(account, token_data_id, 1);
+        let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
         let keys = vector<String>[string::utf8(b"properties")];
         let values = vector[*string::bytes(&properties)];
         let types = vector<String>[string::utf8(b"string")];
         let _token_id = token::mutate_one_token(
-            account,
-            addr,
+            &resource_account_signer,
+            resource_account,
             token_id,
             keys,
             values,
@@ -200,14 +237,37 @@ module wav3::NFT {
         );
     }
 
+    public entry fun mint_token(
+        account: &signer,
+        collection_name: String,
+        token_name: String,
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let collections = borrow_global<Collections>(resource_account);
+        let collection_extend_data = table::borrow(&collections.collection_extend_data, collection_name);
+        assert!(!collection_extend_data.init_pure, EPURE_NFT);
+        if (!collection_extend_data.multi_edtion) {
+            let res_opt = token::get_token_supply(resource_account, token_data_id);
+            let cur_supply = option::extract(&mut res_opt);
+            assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
+        };
+        let _token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
+    }
+
+
     public entry fun add_social_media(
         account: &signer,
         collection: String,
         social_media_type: String,
         social_media: String
-    ) acquires Collections {
-        let addr = signer::address_of(account);
-        let collections = borrow_global_mut<Collections>(addr);
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow_mut(
             &mut  collections.collection_extend_data, collection
         );
@@ -230,9 +290,11 @@ module wav3::NFT {
         collection: String,
         social_media_type: String,
         social_media: String
-    ) acquires Collections {
-        let addr = signer::address_of(account);
-        let collections = borrow_global_mut<Collections>(addr);
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow_mut(
             &mut collections.collection_extend_data, collection
         );
@@ -284,38 +346,10 @@ module wav3::NFT {
 
     fun hex_to_utf8(num: u8): u8 {
         assert!(num < 16, error::invalid_argument(EUTF_CONVERT_ERROR));
-        if (num == 0) {
-            48
-        } else if (num == 1) {
-            49
-        } else if (num == 2) {
-            50
-        } else if (num == 3) {
-            51
-        } else if (num == 4) {
-            52
-        } else if (num == 5) {
-            53
-        } else if (num == 6) {
-            54
-        } else if (num == 7) {
-            55
-        } else if (num == 8) {
-            56
-        } else if (num == 9) {
-            57
-        } else if (num == 10) {
-            97
-        } else if (num == 11) {
-            98
-        } else if (num == 12) {
-            99
-        } else if (num == 13) {
-            100
-        } else if (num == 14) {
-            101
+        if (num < 10) {
+            num + 48
         } else {
-            102
+            num + 97
         }
     }
 }
