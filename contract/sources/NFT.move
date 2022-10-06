@@ -7,7 +7,6 @@ module wav3::NFT {
     use std::vector;
 
     use aptos_framework::block;
-    use aptos_framework::account;
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
@@ -25,6 +24,7 @@ module wav3::NFT {
     const ECOLLECTIONS_NOT_PUBLISHED: u64 = 10;
     const EUTF_CONVERT_ERROR: u64 = 11;
     const EPURE_NFT: u64 = 12;
+    const EFIELD_NOT_MUTABLE: u64 = 13;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -227,7 +227,7 @@ module wav3::NFT {
         let keys = vector<String>[string::utf8(b"properties")];
         let values = vector[*string::bytes(&properties)];
         let types = vector<String>[string::utf8(b"string")];
-        let _token_id = token::mutate_one_token(
+        let token_id = token::mutate_one_token(
             &resource_account_signer,
             resource_account,
             token_id,
@@ -235,6 +235,8 @@ module wav3::NFT {
             values,
             types
         );
+        let token = token::withdraw_token(&resource_account_signer, token_id, 1);
+        token::deposit_token(account, token);
     }
 
     public entry fun mint_token(
@@ -254,7 +256,9 @@ module wav3::NFT {
             let cur_supply = option::extract(&mut res_opt);
             assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
-        let _token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
+        let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
+        let token = token::withdraw_token(&resource_account_signer, token_id, 1);
+        token::deposit_token(account, token);
     }
 
 
@@ -307,6 +311,76 @@ module wav3::NFT {
             &social_media_type
         );
         *social_meida_ref = social_media;
+    }
+
+    public entry fun mutate_token_properties(
+        account: &signer,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
+        token_property_version: u64,
+        amount: u64,
+        keys: vector<String>,
+        values: vector<vector<u8>>,
+        types: vector<String>,
+    ) acquires ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        token::mutate_token_properties(
+            &resource_account_signer,
+            token_owner,
+            resource_account,
+            collection_name,
+            token_name,
+            token_property_version,
+            amount,
+            keys,
+            values,
+            types,
+        );
+    }
+
+    public entry fun mutate_token_uri(
+        account: &signer,
+        collection: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64
+    ) acquires Collections, ResourceAccountCap {
+        assert!(string::length(&uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let token_id = token::create_token_data_id(resource_account, collection, token_name);
+        let collection_extend_data = table::borrow_mut(
+            &mut  collections.token_extend_data, token_id
+        );
+        assert!(collection_extend_data.mutability_config.image_uri, EFIELD_NOT_MUTABLE);
+        collection_extend_data.image_uri = uri;
+        collection_extend_data.image_checksum = image_checksum;
+        collection_extend_data.update_block_height = block::get_current_block_height();
+    }
+
+    public entry fun burn_token_by_creator(
+        creator: &signer,
+        owner: address,
+        collection: String,
+        name: String,
+        property_version: u64,
+        amount: u64,
+    ) acquires ResourceAccountCap {
+        let account_addr = signer::address_of(creator);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        token::burn_by_creator(
+            &resource_account_signer,
+            owner,
+            collection,
+            name,
+            property_version,
+            amount
+        );
     }
 
     fun get_collection_uri(creator: address, collection: String): String {
