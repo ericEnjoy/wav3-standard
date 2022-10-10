@@ -65,7 +65,7 @@ module wav3::NFT {
     }
 
     public entry fun create_collection(
-        creator: &signer,
+        account: &signer,
         name: String,
         description: String,
         maximum: u64,
@@ -80,8 +80,8 @@ module wav3::NFT {
         multi_edtion: bool,
         init_pure: bool
     ) acquires Collections, ResourceAccountCap {
-        init_creator(creator);
-        let account_addr = signer::address_of(creator);
+        init_creator(account);
+        let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
         let collection_extend_data =
@@ -264,7 +264,7 @@ module wav3::NFT {
 
     public entry fun add_social_media(
         account: &signer,
-        collection: String,
+        collection_name: String,
         social_media_type: String,
         social_media: String
     ) acquires Collections, ResourceAccountCap {
@@ -273,13 +273,14 @@ module wav3::NFT {
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow_mut(
-            &mut  collections.collection_extend_data, collection
+            &mut  collections.collection_extend_data, collection_name
         );
         assert!(
             !simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
             ESOCIAL_MEDIA_ALREADY_REGISTER
         );
         simple_map::add(&mut collection_extend_data.social_media, social_media_type, social_media);
+        collection_extend_data.update_block_height = block::get_current_block_height();
     }
 
     public fun create_token_mutability_config(mutability_vec: vector<bool>): MutabilityConfig {
@@ -311,6 +312,7 @@ module wav3::NFT {
             &social_media_type
         );
         *social_meida_ref = social_media;
+        collection_extend_data.update_block_height = block::get_current_block_height();
     }
 
     public entry fun mutate_token_properties(
@@ -323,10 +325,11 @@ module wav3::NFT {
         keys: vector<String>,
         values: vector<vector<u8>>,
         types: vector<String>,
-    ) acquires ResourceAccountCap {
+    ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
         token::mutate_token_properties(
             &resource_account_signer,
             token_owner,
@@ -339,11 +342,12 @@ module wav3::NFT {
             values,
             types,
         );
+        collections.update_block_height = block::get_current_block_height();
     }
 
     public entry fun mutate_token_uri(
         account: &signer,
-        collection: String,
+        collection_name: String,
         token_name: String,
         uri: String,
         image_checksum: u64
@@ -353,31 +357,31 @@ module wav3::NFT {
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
-        let token_id = token::create_token_data_id(resource_account, collection, token_name);
-        let collection_extend_data = table::borrow_mut(
+        let token_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let token_extend_data = table::borrow_mut(
             &mut  collections.token_extend_data, token_id
         );
-        assert!(collection_extend_data.mutability_config.image_uri, EFIELD_NOT_MUTABLE);
-        collection_extend_data.image_uri = uri;
-        collection_extend_data.image_checksum = image_checksum;
-        collection_extend_data.update_block_height = block::get_current_block_height();
+        assert!(token_extend_data.mutability_config.image_uri, EFIELD_NOT_MUTABLE);
+        token_extend_data.image_uri = uri;
+        token_extend_data.image_checksum = image_checksum;
+        token_extend_data.update_block_height = block::get_current_block_height();
     }
 
     public entry fun burn_token_by_creator(
-        creator: &signer,
-        owner: address,
-        collection: String,
-        name: String,
+        account: &signer,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
         property_version: u64,
         amount: u64,
     ) acquires ResourceAccountCap {
-        let account_addr = signer::address_of(creator);
+        let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
         token::burn_by_creator(
             &resource_account_signer,
-            owner,
-            collection,
-            name,
+            token_owner,
+            collection_name,
+            token_name,
             property_version,
             amount
         );
