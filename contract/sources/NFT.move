@@ -10,6 +10,7 @@ module wav3::NFT {
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
+    use aptos_token::property_map;
     use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -27,6 +28,13 @@ module wav3::NFT {
     const EFIELD_NOT_MUTABLE: u64 = 13;
 
     const MAX_URI_LENGTH: u64 = 512;
+
+    // Property key stored in default_properties controlling who can burn the token.
+    // the corresponding property value is BCS serialized bool.
+    const BURNABLE_BY_CREATOR: vector<u8> = b"TOKEN_BURNABLE_BY_CREATOR";
+    const BURNABLE_BY_OWNER: vector<u8> = b"TOKEN_BURNABLE_BY_OWNER";
+    const TOKEN_PROPERTY_MUTABLE: vector<u8> = b"TOKEN_PROPERTY_MUTATBLE";
+    const WAV3_STANDARD_PROPERTY_KEYS: vector<u8> = b"WAV3_STANDARD_PROPERTY_KEYS";
 
     struct CollectionExtend has store {
         social_media: SimpleMap<String, String>,
@@ -47,7 +55,7 @@ module wav3::NFT {
         animation_uri: String,
         image_checksum: u64,
         mutability_config: MutabilityConfig,
-        update_block_height: u64
+        update_block_height: u64,
     }
 
     struct MutabilityConfig has copy, drop, store {
@@ -169,6 +177,10 @@ module wav3::NFT {
         );
         let uri = get_token_uri(resource_account, collection, name);
         let token_mutate_config = token::create_token_mutability_config(&token_mutate_config_vec);
+        let token_property_keys_string  = get_property_keys(&property_keys);
+        vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        vector::push_back(&mut property_values, *string::bytes(&token_property_keys_string));
+        vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
         let token_data_id = token::create_tokendata(
             &resource_account_signer,
             collection,
@@ -202,7 +214,7 @@ module wav3::NFT {
             animation_uri,
             image_checksum,
             mutability_config,
-            update_block_height: block::get_current_block_height() 
+            update_block_height: block::get_current_block_height()
         });
     }
 
@@ -210,13 +222,15 @@ module wav3::NFT {
         account: &signer,
         collection_name: String,
         token_name: String,
-        properties: String
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
         let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
-        let collections = borrow_global<Collections>(resource_account);
+        let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow(& collections.collection_extend_data, collection_name);
         if (!collection_extend_data.multi_edtion) {
             let res_opt =token::get_token_supply(resource_account, token_data_id);
@@ -224,16 +238,19 @@ module wav3::NFT {
             assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
         let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
-        let keys = vector<String>[string::utf8(b"properties")];
-        let values = vector[*string::bytes(&properties)];
-        let types = vector<String>[string::utf8(b"string")];
+        let properties = token::get_property_map(resource_account, token_id);
+        let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        let token_property_keys_string = update_property_keys(token_property_keys_string, &property_keys);
+        vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        vector::push_back(&mut property_values, *string::bytes(&token_property_keys_string));
+        vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
         let token_id = token::mutate_one_token(
             &resource_account_signer,
             resource_account,
             token_id,
-            keys,
-            values,
-            types
+            property_keys,
+            property_values,
+            property_types
         );
         let token = token::withdraw_token(&resource_account_signer, token_id, 1);
         token::deposit_token(account, token);
@@ -243,6 +260,7 @@ module wav3::NFT {
         account: &signer,
         collection_name: String,
         token_name: String,
+        amount: u64
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
@@ -256,8 +274,8 @@ module wav3::NFT {
             let cur_supply = option::extract(&mut res_opt);
             assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
-        let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
-        let token = token::withdraw_token(&resource_account_signer, token_id, 1);
+        let token_id = token::mint_token(&resource_account_signer, token_data_id, amount);
+        let token = token::withdraw_token(&resource_account_signer, token_id, amount);
         token::deposit_token(account, token);
     }
 
@@ -330,6 +348,17 @@ module wav3::NFT {
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
+        let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let token_extend_data = table::borrow_mut(
+            &mut  collections.token_extend_data, token_data_id
+        );
+        let token_id = token::create_token_id(token_data_id, token_property_version);
+        let properties = token::get_property_map(resource_account, token_id);
+        let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
+        vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        vector::push_back(&mut values, *string::bytes(&token_property_keys_string));
+        vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
         token::mutate_token_properties(
             &resource_account_signer,
             token_owner,
@@ -342,7 +371,7 @@ module wav3::NFT {
             values,
             types,
         );
-        collections.update_block_height = block::get_current_block_height();
+        token_extend_data.update_block_height = block::get_current_block_height();
     }
 
     public entry fun mutate_token_uri(
@@ -429,5 +458,49 @@ module wav3::NFT {
         } else {
             num + 97
         }
+    }
+
+    fun get_property_keys(property_keys: &vector<String>): String {
+        let token_preserved_keys = vector<String>[
+            string::utf8(BURNABLE_BY_CREATOR),
+            string::utf8(BURNABLE_BY_OWNER),
+            string::utf8(TOKEN_PROPERTY_MUTABLE),
+            string::utf8(WAV3_STANDARD_PROPERTY_KEYS)
+        ];
+        let token_property_keys_string_bytes = b"";
+        let len = vector::length<String>(property_keys);
+        let i = 0;
+        while (i < len) {
+            let key = vector::borrow<String>(property_keys, i);
+            if (!vector::contains(&token_preserved_keys, key)) {
+                vector::append(&mut token_property_keys_string_bytes, *string::bytes(key));
+                vector::append(&mut token_property_keys_string_bytes, b" ");
+            };
+            i = i + 1;
+        };
+        let token_property_keys_string = string::utf8(token_property_keys_string_bytes);
+        token_property_keys_string
+    }
+
+    fun update_property_keys(token_property_keys: String, property_keys: &vector<String>): String {
+        let token_preserved_keys = vector<String>[
+            string::utf8(BURNABLE_BY_CREATOR),
+            string::utf8(BURNABLE_BY_OWNER),
+            string::utf8(TOKEN_PROPERTY_MUTABLE),
+            string::utf8(WAV3_STANDARD_PROPERTY_KEYS)
+        ];
+        let len = vector::length<String>(property_keys);
+        let i = 0;
+        while (i < len) {
+            let key = vector::borrow<String>(property_keys, i);
+            let str_len = string::length(&token_property_keys);
+            if (!vector::contains(&token_preserved_keys, key)) {
+                if (string::index_of(&token_property_keys, key) == str_len) {
+                    string::append(&mut token_property_keys, *key);
+                };
+            };
+            i = i + 1;
+        };
+        token_property_keys
     }
 }
