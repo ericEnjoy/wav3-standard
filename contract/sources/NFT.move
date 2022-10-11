@@ -2,15 +2,16 @@ module wav3::NFT {
 
     use std::error;
     use std::signer;
-    use std::string::{Self, String};
     use std::option;
     use std::vector;
+    use std::string::{Self, String};
 
     use aptos_framework::block;
-    use aptos_std::simple_map::{Self, SimpleMap};
+    use aptos_token::property_map;
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
-    use aptos_token::property_map;
+    use aptos_std::simple_map::{Self, SimpleMap};
+    use aptos_framework::event::{Self, EventHandle};
     use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -24,7 +25,7 @@ module wav3::NFT {
     const ESOCIAL_MEDIA_NOT_REGISTER: u64 = 9;
     const ECOLLECTIONS_NOT_PUBLISHED: u64 = 10;
     const EUTF_CONVERT_ERROR: u64 = 11;
-    const EPURE_NFT: u64 = 12;
+    const EMINT_NOT_MERGABLE: u64 = 12;
     const EFIELD_NOT_MUTABLE: u64 = 13;
 
     const MAX_URI_LENGTH: u64 = 512;
@@ -47,7 +48,7 @@ module wav3::NFT {
         update_block_height: u64,
         royalty_policy: String,
         multi_edtion: bool,
-        init_pure: bool
+        mint_mergable: bool
     }
 
     struct TokenDataExtend has store {
@@ -65,11 +66,31 @@ module wav3::NFT {
     /// Represent collection and token metadata for a creator
     struct Collections has key {
         collection_extend_data: Table<String, CollectionExtend>,
-        token_extend_data: Table<TokenDataId, TokenDataExtend>
+        token_extend_data: Table<TokenDataId, TokenDataExtend>,
+        create_collection_events: EventHandle<CreateCollectionEvent>,
+        create_token_data_events: EventHandle<CreateTokenDataEvent>,
+
     }
 
     struct ResourceAccountCap has key {
         cap: account::SignerCapability
+    }
+
+    struct CreateCollectionEvent has drop, store {
+        symbol: String,
+        image_uri: String,
+        animation_uri: String,
+        website: String,
+        standard_version: u64,
+        commercial_standard: String,
+        royalty_policy: String,
+        multi_edtion: bool,
+        mint_mergable: bool
+    }
+
+    struct CreateTokenDataEvent has drop, store {
+        image_uri: String,
+        animation_uri: String,
     }
 
     public entry fun create_collection(
@@ -86,14 +107,14 @@ module wav3::NFT {
         commercial_standard: String,
         royalty_policy: String,
         multi_edtion: bool,
-        init_pure: bool
+        mint_mergable: bool
     ) acquires Collections, ResourceAccountCap {
         init_creator(account);
         let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
         let resource_account = signer::address_of(&resource_account_signer);
-        let collection_extend_data =
-            &mut borrow_global_mut<Collections>(resource_account).collection_extend_data;
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let collection_extend_data = &mut collections.collection_extend_data;
         assert!(
             !table::contains(collection_extend_data, name),
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
@@ -117,9 +138,25 @@ module wav3::NFT {
             update_block_height: block::get_current_block_height(),
             royalty_policy,
             multi_edtion,
-            init_pure
+            mint_mergable
         });
+        event::emit_event<CreateCollectionEvent>(
+            &mut collections.create_collection_events,
+            CreateCollectionEvent {
+                symbol,
+                image_uri,
+                animation_uri,
+                website,
+                standard_version,
+                commercial_standard,
+                royalty_policy,
+                multi_edtion,
+                mint_mergable
+            }
+        );
+
     }
+
 
     fun get_resource_account_signer(market_address: address): signer acquires ResourceAccountCap {
         let resource_account_cap = borrow_global<ResourceAccountCap>(market_address);
@@ -145,6 +182,8 @@ module wav3::NFT {
                 Collections{
                     collection_extend_data: table::new(),
                     token_extend_data: table::new(),
+                    create_collection_events: account::new_event_handle<CreateCollectionEvent>(&resource_account_signer),
+                    create_token_data_events: account::new_event_handle<CreateTokenDataEvent>(&resource_account_signer),
                 },
             )
         };
@@ -216,6 +255,13 @@ module wav3::NFT {
             mutability_config,
             update_block_height: block::get_current_block_height()
         });
+        event::emit_event<CreateTokenDataEvent>(
+            &mut collections.create_token_data_events,
+            CreateTokenDataEvent {
+                image_uri,
+                animation_uri
+            }
+        );
     }
 
     public entry fun mint_nft(
@@ -268,7 +314,7 @@ module wav3::NFT {
         let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
         let collections = borrow_global<Collections>(resource_account);
         let collection_extend_data = table::borrow(&collections.collection_extend_data, collection_name);
-        assert!(!collection_extend_data.init_pure, EPURE_NFT);
+        assert!(!collection_extend_data.mint_mergable, EMINT_NOT_MERGABLE);
         if (!collection_extend_data.multi_edtion) {
             let res_opt = token::get_token_supply(resource_account, token_data_id);
             let cur_supply = option::extract(&mut res_opt);
@@ -497,6 +543,7 @@ module wav3::NFT {
             if (!vector::contains(&token_preserved_keys, key)) {
                 if (string::index_of(&token_property_keys, key) == str_len) {
                     string::append(&mut token_property_keys, *key);
+                    string::append(&mut token_property_keys, string::utf8(b" "));
                 };
             };
             i = i + 1;
