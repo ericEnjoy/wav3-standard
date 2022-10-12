@@ -401,10 +401,7 @@ module wav3::NFT {
         );
         let token_id = token::create_token_id(token_data_id, token_property_version);
         let properties = token::get_property_map(resource_account, token_id);
-        let property_value = property_map::borrow(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        let value = property_map::borrow_value(property_value);
-        vector::reverse(&mut value);
-        let token_property_keys_string = string::utf8(value);
+        let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
         vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         vector::push_back(&mut values, *string::bytes(&token_property_keys_string));
