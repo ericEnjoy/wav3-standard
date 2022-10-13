@@ -28,6 +28,7 @@ module wav3::NFT {
     const EUTF_CONVERT_ERROR: u64 = 11;
     const EMINT_NOT_MERGABLE: u64 = 12;
     const EFIELD_NOT_MUTABLE: u64 = 13;
+    const ENO_MUTATE_CAPABILITY: u64 = 14;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -70,7 +71,11 @@ module wav3::NFT {
         token_extend_data: Table<TokenDataId, TokenDataExtend>,
         create_collection_events: EventHandle<CreateCollectionEvent>,
         create_token_data_events: EventHandle<CreateTokenDataEvent>,
+    }
 
+    struct MutateOnceCap has drop, store {
+        image_uri: bool,
+        property: bool
     }
 
     struct ResourceAccountCap has key {
@@ -265,6 +270,28 @@ module wav3::NFT {
         );
     }
 
+    public fun mint_nft_back_mutate_cap(
+        account: &signer,
+        collection_name: String,
+        token_name: String,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>
+    ): MutateOnceCap acquires Collections, ResourceAccountCap {
+        mint_nft(
+            account,
+            collection_name,
+            token_name,
+            property_keys,
+            property_values,
+            property_types
+        );
+        MutateOnceCap {
+            image_uri: true,
+            property: true
+        }
+    }
+
     public entry fun mint_nft(
         account: &signer,
         collection_name: String,
@@ -392,7 +419,59 @@ module wav3::NFT {
         types: vector<String>,
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
-        let resource_account_signer = get_resource_account_signer(account_addr);
+        internal_mutate_token_properties(
+            account_addr,
+            token_owner,
+            collection_name,
+            token_name,
+            token_property_version,
+            amount,
+            keys,
+            values,
+            types
+        );
+    }
+
+    public fun mutate_token_propertis_with_cap(
+        creator_address: address,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
+        token_property_version: u64,
+        amount: u64,
+        keys: vector<String>,
+        values: vector<vector<u8>>,
+        types: vector<String>,
+        mutate_once_cap: &mut MutateOnceCap
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mutate_once_cap.property, ENO_MUTATE_CAPABILITY);
+        internal_mutate_token_properties(
+            creator_address,
+            token_owner,
+            collection_name,
+            token_name,
+            token_property_version,
+            amount,
+            keys,
+            values,
+            types
+        );
+        mutate_once_cap.property = false;
+
+    }
+
+    fun internal_mutate_token_properties(
+        creator_address: address,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
+        token_property_version: u64,
+        amount: u64,
+        keys: vector<String>,
+        values: vector<vector<u8>>,
+        types: vector<String>,
+    ) acquires Collections, ResourceAccountCap {
+        let resource_account_signer = get_resource_account_signer(creator_address);
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
         let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
@@ -428,9 +507,44 @@ module wav3::NFT {
         uri: String,
         image_checksum: u64
     ) acquires Collections, ResourceAccountCap {
-        assert!(string::length(&uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
         let account_addr = signer::address_of(account);
-        let resource_account_signer = get_resource_account_signer(account_addr);
+        internal_mutate_token_uri(
+            account_addr,
+            collection_name,
+            token_name,
+            uri,
+            image_checksum
+        );
+    }
+
+    public fun mutate_token_uri_with_cap(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64,
+        mutate_once_cap: &mut MutateOnceCap
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mutate_once_cap.image_uri, ENO_MUTATE_CAPABILITY);
+        internal_mutate_token_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            uri,
+            image_checksum
+        );
+        mutate_once_cap.image_uri = false;
+    }
+
+    fun internal_mutate_token_uri(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64
+    ) acquires Collections, ResourceAccountCap {
+        assert!(string::length(&uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
+        let resource_account_signer = get_resource_account_signer(creator_address);
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
         let token_id = token::create_token_data_id(resource_account, collection_name, token_name);
@@ -441,6 +555,7 @@ module wav3::NFT {
         token_extend_data.image_uri = uri;
         token_extend_data.image_checksum = image_checksum;
         token_extend_data.update_block_height = block::get_current_block_height();
+
     }
 
     public entry fun burn_token_by_creator(
