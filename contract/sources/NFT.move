@@ -78,6 +78,9 @@ module wav3::NFT {
         property: bool
     }
 
+    struct MintCap has drop, store {
+    }
+
     struct ResourceAccountCap has key {
         cap: account::SignerCapability
     }
@@ -163,6 +166,40 @@ module wav3::NFT {
 
     }
 
+    public fun create_collection_back_mint_cap(
+        account: &signer,
+        name: String,
+        description: String,
+        maximum: u64,
+        mutate_setting: vector<bool>,
+        symbol: String,
+        image_uri: String,
+        animation_uri: String,
+        website: String,
+        standard_version: u64,
+        commercial_standard: String,
+        royalty_policy: String,
+        multi_edtion: bool,
+        mint_mergable: bool,
+    ): MintCap acquires Collections, ResourceAccountCap {
+        create_collection(
+            account,
+            name,
+            description,
+            maximum,
+            mutate_setting,
+            symbol,
+            image_uri,
+            animation_uri,
+            website,
+            standard_version,
+            commercial_standard,
+            royalty_policy,
+            multi_edtion,
+            mint_mergable
+        );
+        MintCap {}
+    }
 
     fun get_resource_account_signer(market_address: address): signer acquires ResourceAccountCap {
         let resource_account_cap = borrow_global<ResourceAccountCap>(market_address);
@@ -214,7 +251,84 @@ module wav3::NFT {
         mutability_config_vec: vector<bool>,
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
-        let resource_account_signer = get_resource_account_signer(account_addr);
+        internal_create_tokendata(
+            account_addr,
+            collection,
+            name,
+            description,
+            maximum,
+            royalty_payee_address,
+            royalty_points_denominator,
+            royalty_points_numerator,
+            token_mutate_config_vec,
+            property_keys,
+            property_values,
+            property_types,
+            image_uri,
+            animation_uri,
+            image_checksum,
+            mutability_config_vec
+        );
+    }
+
+    public fun create_tokendata_with_cap(
+        creator: address,
+        collection: String,
+        name: String,
+        description: String,
+        maximum: u64,
+        royalty_payee_address: address,
+        royalty_points_denominator: u64,
+        royalty_points_numerator: u64,
+        token_mutate_config_vec: vector<bool>,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        image_uri: String,
+        animation_uri: String,
+        image_checksum: u64,
+        mutability_config_vec: vector<bool>,
+        _mint_cap: &MintCap
+    ) acquires Collections, ResourceAccountCap {
+        internal_create_tokendata(
+            creator,
+            collection,
+            name,
+            description,
+            maximum,
+            royalty_payee_address,
+            royalty_points_denominator,
+            royalty_points_numerator,
+            token_mutate_config_vec,
+            property_keys,
+            property_values,
+            property_types,
+            image_uri,
+            animation_uri,
+            image_checksum,
+            mutability_config_vec
+        );
+    }
+
+    fun internal_create_tokendata(
+        creator: address,
+        collection: String,
+        name: String,
+        description: String,
+        maximum: u64,
+        royalty_payee_address: address,
+        royalty_points_denominator: u64,
+        royalty_points_numerator: u64,
+        token_mutate_config_vec: vector<bool>,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        image_uri: String,
+        animation_uri: String,
+        image_checksum: u64,
+        mutability_config_vec: vector<bool>,
+    ) acquires Collections, ResourceAccountCap {
+        let resource_account_signer = get_resource_account_signer(creator);
         let resource_account = signer::address_of(&resource_account_signer);
         assert!(
             exists<Collections>(resource_account),
@@ -270,16 +384,19 @@ module wav3::NFT {
         );
     }
 
-    public fun mint_nft_back_mutate_cap(
+    public fun mint_nft_with_cap_back_mutate_cap(
         account: &signer,
+        creator: address,
         collection_name: String,
         token_name: String,
         property_keys: vector<String>,
         property_values: vector<vector<u8>>,
-        property_types: vector<String>
+        property_types: vector<String>,
+        _mint_cap: &MintCap
     ): MutateOnceCap acquires Collections, ResourceAccountCap {
-        mint_nft(
+        internal_mint_nft(
             account,
+            creator,
             collection_name,
             token_name,
             property_keys,
@@ -292,6 +409,27 @@ module wav3::NFT {
         }
     }
 
+    public fun mint_nft_with_cap(
+        account: &signer,
+        creator: address,
+        collection_name: String,
+        token_name: String,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        _mint_cap: &MintCap
+    ) acquires Collections, ResourceAccountCap {
+        internal_mint_nft(
+            account,
+            creator,
+            collection_name,
+            token_name,
+            property_keys,
+            property_values,
+            property_types
+        );
+    }
+
     public entry fun mint_nft(
         account: &signer,
         collection_name: String,
@@ -301,15 +439,35 @@ module wav3::NFT {
         property_types: vector<String>
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
-        let resource_account_signer = get_resource_account_signer(account_addr);
+        internal_mint_nft(
+            account,
+            account_addr,
+            collection_name,
+            token_name,
+            property_keys,
+            property_values,
+            property_types
+        );
+    }
+
+    fun internal_mint_nft(
+        account: &signer,
+        creator: address,
+        collection_name: String,
+        token_name: String,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>
+    ) acquires Collections, ResourceAccountCap {
+        let resource_account_signer = get_resource_account_signer(creator);
         let resource_account = signer::address_of(&resource_account_signer);
         let token_data_id = token::create_token_data_id(resource_account, collection_name, token_name);
         let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow(& collections.collection_extend_data, collection_name);
         if (!collection_extend_data.multi_edtion) {
-            let res_opt =token::get_token_supply(resource_account, token_data_id);
-            let cur_supply = option::extract(&mut res_opt);
-            assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
+        let res_opt =token::get_token_supply(resource_account, token_data_id);
+        let cur_supply = option::extract(&mut res_opt);
+        assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
         let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
         let properties = token::get_property_map(resource_account, token_id);
@@ -319,22 +477,22 @@ module wav3::NFT {
         vector::push_back(&mut property_values, bcs::to_bytes(&token_property_keys_string));
         vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
         let token_id = token::mutate_one_token(
-            &resource_account_signer,
-            resource_account,
-            token_id,
-            property_keys,
-            property_values,
-            property_types
+        &resource_account_signer,
+        resource_account,
+        token_id,
+        property_keys,
+        property_values,
+        property_types
         );
         let token = token::withdraw_token(&resource_account_signer, token_id, 1);
         token::deposit_token(account, token);
     }
 
     public entry fun mint_token(
-        account: &signer,
-        collection_name: String,
-        token_name: String,
-        amount: u64
+    account: &signer,
+    collection_name: String,
+    token_name: String,
+    amount: u64
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
         let resource_account_signer = get_resource_account_signer(account_addr);
@@ -479,7 +637,7 @@ module wav3::NFT {
             &mut  collections.token_extend_data, token_data_id
         );
         let token_id = token::create_token_id(token_data_id, token_property_version);
-        let properties = token::get_property_map(resource_account, token_id);
+        let properties = token::get_property_map(token_owner, token_id);
         let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
         vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
@@ -578,6 +736,11 @@ module wav3::NFT {
         );
     }
 
+    public fun create_token_data_id(creator: address, collection: String, token_name: String): TokenDataId acquires ResourceAccountCap {
+        let resource_account_signer = get_resource_account_signer(creator);
+        token::create_token_data_id(signer::address_of(&resource_account_signer), collection, token_name)
+    }
+
     fun get_collection_uri(creator: address, collection: String): String {
         let addr_string = address_to_string(creator);
         let uri = string::utf8(b"nft://");
@@ -599,11 +762,11 @@ module wav3::NFT {
     }
 
     fun address_to_string(addr: address): String {
-        let authentication_vec = account::get_authentication_key(addr);
+        let address_vec = bcs::to_bytes(&addr);
         let address_utf8_vec = vector::empty<u8>();
         let i = 0;
         while(i < 32) {
-            let val = *vector::borrow(&authentication_vec, i);
+            let val = *vector::borrow(&address_vec, i);
             let high_4 = val >> 4;
             let low_4 = val << 4 >> 4;
             vector::push_back(&mut address_utf8_vec, hex_to_utf8(high_4));
@@ -618,7 +781,7 @@ module wav3::NFT {
         if (num < 10) {
             num + 48
         } else {
-            num + 97
+            num + 55
         }
     }
 
