@@ -658,7 +658,7 @@ module wav3::NFT {
         token_extend_data.update_block_height = block::get_current_block_height();
     }
 
-    public entry fun mutate_token_uri(
+    public entry fun mutate_token_image_uri(
         account: &signer,
         collection_name: String,
         token_name: String,
@@ -666,7 +666,7 @@ module wav3::NFT {
         image_checksum: u64
     ) acquires Collections, ResourceAccountCap {
         let account_addr = signer::address_of(account);
-        internal_mutate_token_uri(
+        internal_mutate_token_image_uri(
             account_addr,
             collection_name,
             token_name,
@@ -675,7 +675,7 @@ module wav3::NFT {
         );
     }
 
-    public fun mutate_token_uri_with_cap(
+    public fun mutate_token_image_uri_with_cap(
         creator_address: address,
         collection_name: String,
         token_name: String,
@@ -684,7 +684,7 @@ module wav3::NFT {
         mutate_once_cap: &mut MutateOnceCap
     ) acquires Collections, ResourceAccountCap {
         assert!(mutate_once_cap.image_uri, ENO_MUTATE_CAPABILITY);
-        internal_mutate_token_uri(
+        internal_mutate_token_image_uri(
             creator_address,
             collection_name,
             token_name,
@@ -694,7 +694,7 @@ module wav3::NFT {
         mutate_once_cap.image_uri = false;
     }
 
-    fun internal_mutate_token_uri(
+    fun internal_mutate_token_image_uri(
         creator_address: address,
         collection_name: String,
         token_name: String,
