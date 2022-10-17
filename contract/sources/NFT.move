@@ -71,6 +71,8 @@ module wav3::NFT {
         token_extend_data: Table<TokenDataId, TokenDataExtend>,
         create_collection_events: EventHandle<CreateCollectionEvent>,
         create_token_data_events: EventHandle<CreateTokenDataEvent>,
+        mutate_token_image_events: EventHandle<MutateTokenImageEvent>,
+        social_media_events: EventHandle<SocialMediaEvent>,
     }
 
     struct MutateOnceCap has drop, store {
@@ -100,6 +102,20 @@ module wav3::NFT {
     struct CreateTokenDataEvent has drop, store {
         image_uri: String,
         animation_uri: String,
+    }
+
+    struct MutateTokenImageEvent has drop, store {
+        creator: address,
+        collection_name: String,
+        old_image_uri: String,
+        new_image_uri: String
+    }
+
+    struct SocialMediaEvent has drop, store {
+        creator: address,
+        collection_name: String,
+        social_media_type: String,
+        social_media: String
     }
 
     public entry fun create_collection(
@@ -163,7 +179,6 @@ module wav3::NFT {
                 mint_mergable
             }
         );
-
     }
 
     public fun create_collection_back_mint_cap(
@@ -227,6 +242,8 @@ module wav3::NFT {
                     token_extend_data: table::new(),
                     create_collection_events: account::new_event_handle<CreateCollectionEvent>(&resource_account_signer),
                     create_token_data_events: account::new_event_handle<CreateTokenDataEvent>(&resource_account_signer),
+                    mutate_token_image_events: account::new_event_handle<MutateTokenImageEvent>(&resource_account_signer),
+                    social_media_events: account::new_event_handle<SocialMediaEvent>(&resource_account_signer),
                 },
             )
         };
@@ -531,6 +548,12 @@ module wav3::NFT {
         );
         simple_map::add(&mut collection_extend_data.social_media, social_media_type, social_media);
         collection_extend_data.update_block_height = block::get_current_block_height();
+        event::emit_event(&mut collections.social_media_events, SocialMediaEvent{
+            creator: resource_account,
+            collection_name,
+            social_media_type,
+            social_media
+        });
     }
 
     public fun create_token_mutability_config(mutability_vec: vector<bool>): MutabilityConfig {
@@ -542,7 +565,7 @@ module wav3::NFT {
 
     public entry fun update_social_media(
         account: &signer,
-        collection: String,
+        collection_name: String,
         social_media_type: String,
         social_media: String
     ) acquires Collections, ResourceAccountCap {
@@ -551,7 +574,7 @@ module wav3::NFT {
         let resource_account = signer::address_of(&resource_account_signer);
         let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow_mut(
-            &mut collections.collection_extend_data, collection
+            &mut collections.collection_extend_data, collection_name
         );
         assert!(
             simple_map::contains_key(&collection_extend_data.social_media, &social_media_type),
@@ -563,6 +586,12 @@ module wav3::NFT {
         );
         *social_meida_ref = social_media;
         collection_extend_data.update_block_height = block::get_current_block_height();
+        event::emit_event(&mut collections.social_media_events, SocialMediaEvent{
+            creator: resource_account,
+            collection_name,
+            social_media_type,
+            social_media
+        });
     }
 
     public entry fun mutate_token_properties(
@@ -615,7 +644,6 @@ module wav3::NFT {
             types
         );
         mutate_once_cap.property = false;
-
     }
 
     fun internal_mutate_token_properties(
@@ -710,10 +738,17 @@ module wav3::NFT {
             &mut  collections.token_extend_data, token_id
         );
         assert!(token_extend_data.mutability_config.image_uri, EFIELD_NOT_MUTABLE);
+        let old_image_uri = *&token_extend_data.image_uri;
         token_extend_data.image_uri = uri;
         token_extend_data.image_checksum = image_checksum;
         token_extend_data.update_block_height = block::get_current_block_height();
 
+        event::emit_event(&mut collections.mutate_token_image_events, MutateTokenImageEvent{
+            creator: resource_account,
+            collection_name,
+            old_image_uri,
+            new_image_uri: uri
+        });
     }
 
     public entry fun burn_token_by_creator(
