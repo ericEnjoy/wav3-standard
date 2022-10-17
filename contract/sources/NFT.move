@@ -39,6 +39,17 @@ module wav3::NFT {
     const TOKEN_PROPERTY_MUTABLE: vector<u8> = b"TOKEN_PROPERTY_MUTATBLE";
     const WAV3_STANDARD_PROPERTY_KEYS: vector<u8> = b"WAV3_STANDARD_PROPERTY_KEYS";
 
+    struct TokenId has store, copy, drop {
+        collection_id: CollectionId,
+        token_name: String
+    }
+
+    struct CollectionId has store, copy, drop {
+        creator: address,
+        collection_name: String
+
+    }
+
     struct CollectionExtend has store {
         social_media: SimpleMap<String, String>,
         symbol: String,
@@ -776,39 +787,51 @@ module wav3::NFT {
         token::create_token_data_id(signer::address_of(&resource_account_signer), collection, token_name)
     }
 
-    fun get_collection_uri(creator: address, collection: String): String {
-        let addr_string = address_to_string(creator);
+    fun get_collection_uri(creator: address, collection_name: String): String {
+        let collection_id = CollectionId {
+            creator,
+            collection_name
+        };
+        let collection_id_bcs_vec = bcs::to_bytes(&collection_id);
+        let collection_id_bcs_hex_string = vec_u8_to_hex_string(collection_id_bcs_vec);
         let uri = string::utf8(b"nft://");
-        string::append(&mut uri, addr_string);
-        string::append(&mut uri, string::utf8(b"/"));
-        string::append(&mut uri, collection);
+        string::append(&mut uri, collection_id_bcs_hex_string);
         uri
     }
 
-    fun get_token_uri(creator: address, collection: String, token_name: String): String {
-        let addr_string = address_to_string(creator);
+    fun get_token_uri(creator: address, collection_name: String, token_name: String): String {
+        let token_id = TokenId{
+            collection_id: CollectionId {
+                creator,
+                collection_name
+            },
+            token_name
+        };
+        let token_id_bcs_vec = bcs::to_bytes(&token_id);
+        let token_id_bcs_hex_string = vec_u8_to_hex_string(token_id_bcs_vec);
         let uri = string::utf8(b"nft://");
-        string::append(&mut uri, addr_string);
-        string::append(&mut uri, string::utf8(b"/"));
-        string::append(&mut uri, collection);
-        string::append(&mut uri, string::utf8(b"/"));
-        string::append(&mut uri, token_name);
+        string::append(&mut uri, token_id_bcs_hex_string);
         uri
     }
 
     fun address_to_string(addr: address): String {
         let address_vec = bcs::to_bytes(&addr);
-        let address_utf8_vec = vector::empty<u8>();
+        vec_u8_to_hex_string(address_vec)
+    }
+
+    fun vec_u8_to_hex_string(vec_u8: vector<u8>): String {
+        let vec_utf8 = vector::empty<u8>();
         let i = 0;
-        while(i < 32) {
-            let val = *vector::borrow(&address_vec, i);
+        let len = vector::length(&vec_u8);
+        while(i < len) {
+            let val = *vector::borrow(&vec_u8, i);
             let high_4 = val >> 4;
             let low_4 = val << 4 >> 4;
-            vector::push_back(&mut address_utf8_vec, hex_to_utf8(high_4));
-            vector::push_back(&mut address_utf8_vec, hex_to_utf8(low_4));
+            vector::push_back(&mut vec_utf8, hex_to_utf8(high_4));
+            vector::push_back(&mut vec_utf8, hex_to_utf8(low_4));
             i = i + 1;
         };
-        string::utf8(address_utf8_vec)
+        string::utf8(vec_utf8)
     }
 
     fun hex_to_utf8(num: u8): u8 {
