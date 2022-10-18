@@ -238,7 +238,9 @@ module wav3::NFT {
     ) acquires ResourceAccountCap {
         let account_addr = signer::address_of(creator);
         if (!exists<ResourceAccountCap>(account_addr)) {
-            let (account_signer, cap) = account::create_resource_account(creator, b"wav3");
+            let block_height = block::get_current_block_height();
+            let seed = bcs::to_bytes(&block_height);
+            let (account_signer, cap) = account::create_resource_account(creator, seed);
             move_to(creator, ResourceAccountCap{
                 cap
             });

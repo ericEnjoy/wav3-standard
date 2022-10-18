@@ -8,4 +8,4 @@ AptosFramework = { local = "../../../aptos-core/aptos-move/framework/aptos-frame
 AptosToken = { local = "../../../aptos-core/aptos-move/framework/aptos-token"}
 
 [addresses]
-wav3 = "0xaa18071f1b19cc799b783408586c83cac21d9a6826bd93b5bd5febd78545053c"
+wav3 = "0x0e0be7de13cf6e77134a1e9f98d3c38eb96c7ee2b270641d92b4750e8fd0e481"
