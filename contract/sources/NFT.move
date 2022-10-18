@@ -118,6 +118,7 @@ module wav3::NFT {
     struct MutateTokenImageEvent has drop, store {
         creator: address,
         collection_name: String,
+        token_name: String,
         old_image_uri: String,
         new_image_uri: String
     }
@@ -759,6 +760,7 @@ module wav3::NFT {
         event::emit_event(&mut collections.mutate_token_image_events, MutateTokenImageEvent{
             creator: resource_account,
             collection_name,
+            token_name,
             old_image_uri,
             new_image_uri: uri
         });
