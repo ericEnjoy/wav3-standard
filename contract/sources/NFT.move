@@ -45,9 +45,9 @@ module wav3::NFT {
     }
 
     struct CollectionId has store, copy, drop {
+        contract: address,
         creator: address,
         collection_name: String
-
     }
 
     struct CollectionExtend has store {
@@ -61,7 +61,8 @@ module wav3::NFT {
         update_block_height: u64,
         royalty_policy: String,
         multi_edtion: bool,
-        mint_mergable: bool
+        mint_mergable: bool,
+        parser_domain: String
     }
 
     struct TokenDataExtend has store {
@@ -144,7 +145,8 @@ module wav3::NFT {
         commercial_standard: String,
         royalty_policy: String,
         multi_edtion: bool,
-        mint_mergable: bool
+        mint_mergable: bool,
+        parser_domain: String,
     ) acquires Collections, ResourceAccountCap {
         init_creator(account);
         let account_addr = signer::address_of(account);
@@ -156,8 +158,8 @@ module wav3::NFT {
             !table::contains(collection_extend_data, name),
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
         );
+        let uri = get_collection_uri(parser_domain, resource_account, name);
 
-        let uri = get_collection_uri(resource_account, name);
         token::create_collection(&resource_account_signer, name, description, uri, maximum, mutate_setting);
 
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
@@ -175,7 +177,8 @@ module wav3::NFT {
             update_block_height: block::get_current_block_height(),
             royalty_policy,
             multi_edtion,
-            mint_mergable
+            mint_mergable,
+            parser_domain
         });
         event::emit_event<CreateCollectionEvent>(
             &mut collections.create_collection_events,
@@ -208,6 +211,7 @@ module wav3::NFT {
         royalty_policy: String,
         multi_edtion: bool,
         mint_mergable: bool,
+        parser_domain: String,
     ): MintCap acquires Collections, ResourceAccountCap {
         create_collection(
             account,
@@ -223,7 +227,8 @@ module wav3::NFT {
             commercial_standard,
             royalty_policy,
             multi_edtion,
-            mint_mergable
+            mint_mergable,
+            parser_domain
         );
         MintCap {}
     }
@@ -365,9 +370,15 @@ module wav3::NFT {
             exists<Collections>(resource_account),
             error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
         );
-        let uri = get_token_uri(resource_account, collection, name);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        assert!(
+            table::contains(&collections.collection_extend_data, collection),
+            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
+        );
+        let collection_extend = table::borrow(&collections.collection_extend_data, collection);
         let token_mutate_config = token::create_token_mutability_config(&token_mutate_config_vec);
         let token_property_keys_string  = get_property_keys(&property_keys);
+        let token_uri = get_token_uri(collection_extend.parser_domain, resource_account, collection, name);
         vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         vector::push_back(&mut property_values, bcs::to_bytes(&token_property_keys_string));
         vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
@@ -377,7 +388,7 @@ module wav3::NFT {
             name,
             description,
             maximum,
-            uri,
+            token_uri,
             royalty_payee_address,
             royalty_points_denominator,
             royalty_points_numerator,
@@ -386,13 +397,8 @@ module wav3::NFT {
             property_values,
             property_types,
         );
-        let collections = borrow_global_mut<Collections>(resource_account);
         assert!(string::length(&image_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
         assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EANIMATION_URI_TOO_LONG));
-        assert!(
-            table::contains(&collections.collection_extend_data, collection),
-            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
-        );
         assert!(
             !table::contains(&collections.token_extend_data, token_data_id),
             error::already_exists(ETOKEN_DATA_ALREADY_EXISTS),
@@ -496,9 +502,9 @@ module wav3::NFT {
         let collections = borrow_global_mut<Collections>(resource_account);
         let collection_extend_data = table::borrow(& collections.collection_extend_data, collection_name);
         if (!collection_extend_data.multi_edtion) {
-        let res_opt =token::get_token_supply(resource_account, token_data_id);
-        let cur_supply = option::extract(&mut res_opt);
-        assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
+            let res_opt =token::get_token_supply(resource_account, token_data_id);
+            let cur_supply = option::extract(&mut res_opt);
+            assert!(cur_supply < 2, ENOT_A_MULTI_EDITION);
         };
         let token_id = token::mint_token(&resource_account_signer, token_data_id, 1);
         let properties = token::get_property_map(resource_account, token_id);
@@ -791,21 +797,24 @@ module wav3::NFT {
         token::create_token_data_id(signer::address_of(&resource_account_signer), collection, token_name)
     }
 
-    fun get_collection_uri(creator: address, collection_name: String): String {
+    fun get_collection_uri(parser_domain: String, creator: address, collection_name: String): String {
         let collection_id = CollectionId {
+            contract: @wav3,
             creator,
             collection_name
         };
         let collection_id_bcs_vec = bcs::to_bytes(&collection_id);
         let collection_id_bcs_hex_string = vec_u8_to_hex_string(collection_id_bcs_vec);
-        let uri = string::utf8(b"nft://");
+        let uri = copy parser_domain;
+        string::append_utf8(&mut uri, b"/");
         string::append(&mut uri, collection_id_bcs_hex_string);
         uri
     }
 
-    fun get_token_uri(creator: address, collection_name: String, token_name: String): String {
+    fun get_token_uri(parser_domain: String, creator: address, collection_name: String, token_name: String): String {
         let token_id = TokenId{
             collection_id: CollectionId {
+                contract: @wav3,
                 creator,
                 collection_name
             },
@@ -813,7 +822,8 @@ module wav3::NFT {
         };
         let token_id_bcs_vec = bcs::to_bytes(&token_id);
         let token_id_bcs_hex_string = vec_u8_to_hex_string(token_id_bcs_vec);
-        let uri = string::utf8(b"nft://");
+        let uri = copy parser_domain;
+        string::append_utf8(&mut uri, b"/");
         string::append(&mut uri, token_id_bcs_hex_string);
         uri
     }
