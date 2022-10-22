@@ -62,7 +62,8 @@ module wav3::NFT {
         royalty_policy: String,
         multi_edtion: bool,
         mint_mergable: bool,
-        parser_domain: String
+        uri_scheme: String,
+        uri_content_type: String
     }
 
     struct TokenDataExtend has store {
@@ -146,7 +147,8 @@ module wav3::NFT {
         royalty_policy: String,
         multi_edtion: bool,
         mint_mergable: bool,
-        parser_domain: String,
+        uri_scheme: String,
+        uri_content_type: String
     ) acquires Collections, ResourceAccountCap {
         init_creator(account);
         let account_addr = signer::address_of(account);
@@ -158,7 +160,7 @@ module wav3::NFT {
             !table::contains(collection_extend_data, name),
             error::already_exists(ECOLLECTION_ALREADY_EXISTS),
         );
-        let uri = get_collection_uri(parser_domain, resource_account, name);
+        let uri = get_collection_uri(uri_scheme, uri_content_type, resource_account, name);
 
         token::create_collection(&resource_account_signer, name, description, uri, maximum, mutate_setting);
 
@@ -178,7 +180,8 @@ module wav3::NFT {
             royalty_policy,
             multi_edtion,
             mint_mergable,
-            parser_domain
+            uri_scheme,
+            uri_content_type
         });
         event::emit_event<CreateCollectionEvent>(
             &mut collections.create_collection_events,
@@ -211,7 +214,8 @@ module wav3::NFT {
         royalty_policy: String,
         multi_edtion: bool,
         mint_mergable: bool,
-        parser_domain: String,
+        uri_scheme: String,
+        uri_content_type: String
     ): MintCap acquires Collections, ResourceAccountCap {
         create_collection(
             account,
@@ -228,7 +232,8 @@ module wav3::NFT {
             royalty_policy,
             multi_edtion,
             mint_mergable,
-            parser_domain
+            uri_scheme,
+            uri_content_type
         );
         MintCap {}
     }
@@ -378,7 +383,7 @@ module wav3::NFT {
         let collection_extend = table::borrow(&collections.collection_extend_data, collection);
         let token_mutate_config = token::create_token_mutability_config(&token_mutate_config_vec);
         let token_property_keys_string  = get_property_keys(&property_keys);
-        let token_uri = get_token_uri(collection_extend.parser_domain, resource_account, collection, name);
+        let token_uri = get_token_uri(collection_extend.uri_scheme, collection_extend.uri_content_type, resource_account, collection, name);
         vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         vector::push_back(&mut property_values, bcs::to_bytes(&token_property_keys_string));
         vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
@@ -797,7 +802,7 @@ module wav3::NFT {
         token::create_token_data_id(signer::address_of(&resource_account_signer), collection, token_name)
     }
 
-    fun get_collection_uri(parser_domain: String, creator: address, collection_name: String): String {
+    fun get_collection_uri(uri_scheme: String, uri_content_type: String, creator: address, collection_name: String): String {
         let collection_id = CollectionId {
             contract: @wav3,
             creator,
@@ -805,13 +810,15 @@ module wav3::NFT {
         };
         let collection_id_bcs_vec = bcs::to_bytes(&collection_id);
         let collection_id_bcs_hex_string = vec_u8_to_hex_string(collection_id_bcs_vec);
-        let uri = copy parser_domain;
-        string::append_utf8(&mut uri, b"/");
+        let uri = copy uri_scheme;
+        string::append_utf8(&mut uri, b"/collection/");
         string::append(&mut uri, collection_id_bcs_hex_string);
+        string::append_utf8(&mut uri, b".");
+        string::append(&mut uri, uri_content_type);
         uri
     }
 
-    fun get_token_uri(parser_domain: String, creator: address, collection_name: String, token_name: String): String {
+    fun get_token_uri(uri_scheme: String, uri_content_type: String, creator: address, collection_name: String, token_name: String): String {
         let token_id = TokenId{
             collection_id: CollectionId {
                 contract: @wav3,
@@ -822,9 +829,11 @@ module wav3::NFT {
         };
         let token_id_bcs_vec = bcs::to_bytes(&token_id);
         let token_id_bcs_hex_string = vec_u8_to_hex_string(token_id_bcs_vec);
-        let uri = copy parser_domain;
-        string::append_utf8(&mut uri, b"/");
+        let uri = copy uri_scheme;
+        string::append_utf8(&mut uri, b"/token/");
         string::append(&mut uri, token_id_bcs_hex_string);
+        string::append_utf8(&mut uri, b".");
+        string::append(&mut uri, uri_content_type);
         uri
     }
 
