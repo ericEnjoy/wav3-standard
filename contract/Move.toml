@@ -1,11 +1,12 @@
 [package]
-name = 'nft'
-version = '1.0.0'
+    name = 'nft'
+    version = '1.0.0'
 
 [dependencies]
-MoveStdlib = { local = "../../../aptos-core/aptos-move/framework/move-stdlib" }
-AptosFramework = { local = "../../../aptos-core/aptos-move/framework/aptos-framework"}
-AptosToken = { local = "../../../aptos-core/aptos-move/framework/aptos-token"}
+    AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev="main"}
+    AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib", rev="main"}
+    MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib", rev="main"}
+    AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token", rev="main"}
 
 [addresses]
-wav3 = "0x290187c7eaac280539f93176dd4c1373595fca224891dc11cd5b36e34d4e793a"
+    wav3 = "0x290187c7eaac280539f93176dd4c1373595fca224891dc11cd5b36e34d4e793a"
