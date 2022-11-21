@@ -516,7 +516,7 @@ module wav3::NFT {
         let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         let token_property_keys_string = update_property_keys(token_property_keys_string, &property_keys);
         vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        vector::push_back(&mut property_values, bcs::to_bytes(&token_property_keys_string));
+        vector::push_back(&mut property_values, *string::bytes(&token_property_keys_string));
         vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
         let token_id = token::mutate_one_token(
         &resource_account_signer,
@@ -726,9 +726,9 @@ module wav3::NFT {
         let resource_account = signer::address_of(&resource_account_signer);
         //        fix_standard_keys(&mut properties);
         let token_property_keys_string = get_property_keys(&keys);
+        let update_keys = vector<String>[string::utf8(WAV3_STANDARD_PROPERTY_KEYS)];
         let values = vector::empty<vector<u8>>();
         let types = vector::empty<String>();
-        vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         vector::push_back(&mut values, *string::bytes(&token_property_keys_string));
         vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
         token::mutate_token_properties(
@@ -739,7 +739,7 @@ module wav3::NFT {
             token_name,
             token_property_version,
             amount,
-            keys,
+            update_keys,
             values,
             types,
         );
