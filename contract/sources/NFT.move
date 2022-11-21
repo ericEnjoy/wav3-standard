@@ -8,11 +8,11 @@ module wav3::NFT {
     use std::string::{Self, String};
 
     use aptos_framework::block;
-    use aptos_token::property_map;
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_framework::event::{Self, EventHandle};
+    use aptos_token::property_map::{Self, PropertyMap};
     use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -385,7 +385,7 @@ module wav3::NFT {
         let token_property_keys_string  = get_property_keys(&property_keys);
         let token_uri = get_token_uri(collection_extend.uri_scheme, collection_extend.uri_content_type, resource_account, collection, name);
         vector::push_back(&mut property_keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        vector::push_back(&mut property_values, bcs::to_bytes(&token_property_keys_string));
+        vector::push_back(&mut property_values, *string::bytes(&token_property_keys_string));
         vector::push_back(&mut property_types, string::utf8(b"0x1::string::String"));
         let token_data_id = token::create_tokendata(
             &resource_account_signer,
@@ -691,6 +691,7 @@ module wav3::NFT {
         );
         let token_id = token::create_token_id(token_data_id, token_property_version);
         let properties = token::get_property_map(token_owner, token_id);
+//        fix_standard_keys(&mut properties);
         let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
         let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
         vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
@@ -709,6 +710,40 @@ module wav3::NFT {
             types,
         );
         token_extend_data.update_block_height = block::get_current_block_height();
+    }
+
+    public fun mutate_standard_keys(
+        account: &signer,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
+        token_property_version: u64,
+        amount: u64,
+        keys: vector<String>
+    ) acquires ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        //        fix_standard_keys(&mut properties);
+        let token_property_keys_string = get_property_keys(&keys);
+        let values = vector::empty<vector<u8>>();
+        let types = vector::empty<String>();
+        vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+        vector::push_back(&mut values, *string::bytes(&token_property_keys_string));
+        vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
+        token::mutate_token_properties(
+            &resource_account_signer,
+            token_owner,
+            resource_account,
+            collection_name,
+            token_name,
+            token_property_version,
+            amount,
+            keys,
+            values,
+            types,
+        );
+
     }
 
     public entry fun mutate_token_image_uri(
@@ -836,6 +871,24 @@ module wav3::NFT {
         string::append(&mut uri, uri_content_type);
         uri
     }
+
+//    fun fix_standard_keys(property_map: &mut PropertyMap) {
+//        let keys_val =  property_map::borrow(property_map, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+//        let vec_u8_val = property_map::borrow_value(keys_val);
+//        let try_string = string::try_utf8(vec_u8_val);
+//        if (!option::is_some<String>(&try_string)) {
+//            let len:u8 = vector::length(&vec_u8_val);
+//            let length_pad = vector<u8>[len];
+//            vector::append(&mut length_pad, vec_u8_val);
+//            property_map::update_property_map(
+//                property_map,
+//                vector<String>[string::utf8(WAV3_STANDARD_PROPERTY_KEYS)],
+//                vector<vector<u8>>[length_pad],
+//                vector<String>[string::utf8(b"0x1::string::String")]
+//            )
+//        };
+//
+//    }
 
     fun address_to_string(addr: address): String {
         let address_vec = bcs::to_bytes(&addr);
