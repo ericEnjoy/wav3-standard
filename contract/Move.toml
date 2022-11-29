@@ -8,5 +8,6 @@
     MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
     AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
 
+
 [addresses]
     wav3 = "0x290187c7eaac280539f93176dd4c1373595fca224891dc11cd5b36e34d4e793a"

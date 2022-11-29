@@ -8,11 +8,11 @@ module wav3::NFT {
     use std::string::{Self, String};
 
     use aptos_framework::block;
+    use aptos_token::property_map;
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_framework::event::{Self, EventHandle};
-    use aptos_token::property_map::{Self, PropertyMap};
     use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -693,10 +693,12 @@ module wav3::NFT {
         let properties = token::get_property_map(token_owner, token_id);
 //        fix_standard_keys(&mut properties);
         let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
-        vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        vector::push_back(&mut values, bcs::to_bytes(&token_property_keys_string));
-        vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
+        if (does_property_keys_need_update(token_property_keys_string, &keys)) {
+            let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
+            vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+            vector::push_back(&mut values, bcs::to_bytes(&token_property_keys_string));
+            vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
+        };
         token::mutate_token_properties(
             &resource_account_signer,
             token_owner,
@@ -960,5 +962,21 @@ module wav3::NFT {
             i = i + 1;
         };
         token_property_keys
+    }
+
+    fun does_property_keys_need_update(token_property_keys: String, property_keys: &vector<String>): bool {
+        let i = 0;
+        let need_to_be_updated = false;
+        let len = vector::length<String>(property_keys);
+        let token_property_keys_len = string::length(&token_property_keys);
+        while (i < len) {
+            let key = vector::borrow<String>(property_keys, i);
+            if (string::index_of(&token_property_keys, key) == token_property_keys_len) {
+                need_to_be_updated = true;
+                break
+            };
+            i = i + 1;
+        };
+        need_to_be_updated
     }
 }
