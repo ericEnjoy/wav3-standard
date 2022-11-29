@@ -8,11 +8,11 @@ module wav3::NFT {
     use std::string::{Self, String};
 
     use aptos_framework::block;
+    use aptos_token::property_map;
     use aptos_std::table::{Self, Table};
     use aptos_token::token::{Self, TokenDataId};
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_framework::event::{Self, EventHandle};
-    use aptos_token::property_map::{Self, PropertyMap};
     use aptos_framework::account::{Self, create_signer_with_capability};
 
     const ECOLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -32,8 +32,8 @@ module wav3::NFT {
 
     const MAX_URI_LENGTH: u64 = 512;
 
-    // Property key stored in default_properties controlling who can burn the token.
-    // the corresponding property value is BCS serialized bool.
+    /// Property key stored in default_properties controlling who can burn the token.
+    /// the corresponding property value is BCS serialized bool.
     const BURNABLE_BY_CREATOR: vector<u8> = b"TOKEN_BURNABLE_BY_CREATOR";
     const BURNABLE_BY_OWNER: vector<u8> = b"TOKEN_BURNABLE_BY_OWNER";
     const TOKEN_PROPERTY_MUTABLE: vector<u8> = b"TOKEN_PROPERTY_MUTATBLE";
@@ -961,4 +961,96 @@ module wav3::NFT {
         };
         token_property_keys
     }
+    #[test_only]
+    fun initialize_for_test() {
+        account::create_account_for_test(@aptos_framework);
+        let cap = account::create_test_signer_cap(@aptos_framework);
+        let aptos_framework_signer = create_signer_with_capability(&cap);
+        block::initialize_for_test(&aptos_framework_signer, 1);
+
+    }
+
+    #[test_only]
+    public fun get_collection_name(): String {
+        string::utf8(b"Wav Standard")
+    }
+
+    #[test_only]
+    public fun get_token_name(): String {
+        string::utf8(b"Wav Standard Token #1")
+    }
+
+    #[test_only]
+    public fun get_description(): String {
+        string::utf8(b"Wav Standard Makes Aptos Great Again")
+    }
+
+    #[test(sender=@4)]
+    public entry fun test_create_collection(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        initialize_for_test();
+        account::create_account_for_test(signer::address_of(sender));
+
+        create_collection(
+            sender,
+            get_collection_name(),
+            get_description(),
+            1000,
+            vector[true, true, true, true, true],
+            string::utf8(b"WAV"),
+            string::utf8(b"https://wav3.net/"),
+            string::utf8(b""),
+            string::utf8(b"https://wav3.net/"),
+            0,
+            string::utf8(b""),
+            string::utf8(b""),
+            true,
+            false,
+            string::utf8(b"https://wav3.net/"),
+            string::utf8(b"json")
+        );
+    }
+
+    #[test(sender=@4)]
+    public entry fun test_create_tokendata(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        let sender_addr = signer::address_of(sender);
+        test_create_collection(sender);
+        create_tokendata(
+            sender,
+            get_collection_name(),
+            get_token_name(),
+            get_description(),
+            100,
+            sender_addr,
+            100000,
+            100,
+            vector[true, true, true, true, true],
+            vector::empty<String>(),
+            vector::empty<vector<u8>>(),
+            vector::empty<String>(),
+            string::utf8(b"https://wav3.net/"),
+            string::utf8(b"https://wav3.net/"),
+            0,
+            vector[true, true, true, true, true]
+        );
+    }
+
+    #[test(sender=@4)]
+    public entry fun test_mint_nft() {}
+
+    #[test(sender=@4)]
+    public entry fun test_mint_token() {}
+
+    #[test(sender=@4)]
+    public entry fun test_add_social_media() {}
+
+    #[test(sender=@4)]
+    public entry fun test_update_social_media() {}
+
+    #[test(sender=@4)]
+    public entry fun test_mutate_token_image_uri() {}
+
+    #[test(sender=@4)]
+    public entry fun test_mutate_token_properties() {}
 }
