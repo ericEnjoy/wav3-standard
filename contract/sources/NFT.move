@@ -692,10 +692,12 @@ module wav3::NFT {
         let token_id = token::create_token_id(token_data_id, token_property_version);
         let properties = token::get_property_map(token_owner, token_id);
         let token_property_keys_string = property_map::read_string(&properties, &string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
-        vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
-        vector::push_back(&mut values, bcs::to_bytes(&token_property_keys_string));
-        vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
+        if (does_property_keys_need_update(token_property_keys_string, &keys)) {
+            let token_property_keys_string = update_property_keys(token_property_keys_string, &keys);
+            vector::push_back(&mut keys, string::utf8(WAV3_STANDARD_PROPERTY_KEYS));
+            vector::push_back(&mut values, bcs::to_bytes(&token_property_keys_string));
+            vector::push_back(&mut types, string::utf8(b"0x1::string::String"));
+        };
         token::mutate_token_properties(
             &resource_account_signer,
             token_owner,
@@ -908,5 +910,21 @@ module wav3::NFT {
             i = i + 1;
         };
         token_property_keys
+    }
+
+    fun does_property_keys_need_update(token_property_keys: String, property_keys: &vector<String>): bool {
+        let i = 0;
+        let need_to_be_updated = false;
+        let len = vector::length<String>(property_keys);
+        let token_property_keys_len = string::length(&token_property_keys);
+        while (i < len) {
+            let key = vector::borrow<String>(property_keys, i);
+            if (string::index_of(&token_property_keys, key) == token_property_keys_len) {
+                need_to_be_updated = true;
+                break
+            };
+            i = i + 1;
+        };
+        need_to_be_updated
     }
 }
