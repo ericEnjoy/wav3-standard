@@ -961,6 +961,7 @@ module wav3::NFT {
         };
         token_property_keys
     }
+
     #[test_only]
     fun initialize_for_test() {
         account::create_account_for_test(@aptos_framework);
@@ -1037,20 +1038,82 @@ module wav3::NFT {
     }
 
     #[test(sender=@4)]
-    public entry fun test_mint_nft() {}
+    public entry fun test_mint_nft(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        test_create_tokendata(sender);
+        mint_nft(
+            sender,
+            get_collection_name(),
+            get_token_name(),
+            vector::empty<String>(),
+            vector::empty<vector<u8>>(),
+            vector::empty<String>(),
+        );
+    }
 
     #[test(sender=@4)]
-    public entry fun test_mint_token() {}
+    public entry fun test_mint_token(sender: &signer) acquires Collections, ResourceAccountCap {
+        test_create_tokendata(sender);
+        mint_token(
+            sender,
+            get_collection_name(),
+            get_token_name(),
+            1
+        );
+
+    }
 
     #[test(sender=@4)]
-    public entry fun test_add_social_media() {}
+    public entry fun test_add_social_media(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        test_create_tokendata(sender);
+        add_social_media(
+            sender,
+            get_collection_name(),
+            string::utf8(b"twitter"),
+            string::utf8(b"https://twitter.com/aptos_wave")
+        );
+    }
 
     #[test(sender=@4)]
-    public entry fun test_update_social_media() {}
+    public entry fun test_update_social_media(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        test_add_social_media(sender);
+        update_social_media(
+            sender,
+            get_collection_name(),
+            string::utf8(b"twitter"),
+            string::utf8(b"https://twitter.com/aptos_wave")
+        );
+    }
 
     #[test(sender=@4)]
-    public entry fun test_mutate_token_image_uri() {}
+    public entry fun test_mutate_token_image_uri(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        test_mint_nft(sender);
+        mutate_token_image_uri(
+            sender,
+            get_collection_name(),
+            get_token_name(),
+            string::utf8(b"https://twitter.com/aptos_wave"),
+            0
+        );
+    }
 
     #[test(sender=@4)]
-    public entry fun test_mutate_token_properties() {}
+    public entry fun test_mutate_token_properties(sender: &signer) acquires Collections, ResourceAccountCap {
+
+        test_mint_nft(sender);
+        mutate_token_properties(
+            sender,
+            signer::address_of(sender),
+            get_collection_name(),
+            get_token_name(),
+            1,
+            1,
+            vector::empty<String>(),
+            vector::empty<vector<u8>>(),
+            vector::empty<String>()
+        );
+    }
 }
