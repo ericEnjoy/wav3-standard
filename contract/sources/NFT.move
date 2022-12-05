@@ -238,6 +238,47 @@ module wav3::NFT {
         MintCap {}
     }
 
+    public entry fun update_uri_scheme(
+        creator: &signer,
+        collection: String,
+        uri_scheme: String
+    ) acquires ResourceAccountCap, Collections {
+        let account_addr = signer::address_of(creator);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let collection_extend_data = &mut collections.collection_extend_data;
+        assert!(
+            table::contains(collection_extend_data, collection),
+            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
+        );
+        let collection_extend = table::borrow_mut(collection_extend_data, collection);
+        collection_extend.uri_scheme = uri_scheme;
+    }
+
+    public entry fun mutate_tokendata_uri(
+        creator: &signer,
+        collection: String,
+        name: String,
+    ) acquires ResourceAccountCap, Collections {
+        let creator_addr = signer::address_of(creator);
+        let resource_account_signer = get_resource_account_signer(creator_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        assert!(
+            exists<Collections>(resource_account),
+            error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
+        );
+        let collections = borrow_global_mut<Collections>(resource_account);
+        assert!(
+            table::contains(&collections.collection_extend_data, collection),
+            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
+        );
+        let collection_extend = table::borrow(&collections.collection_extend_data, collection);
+        let token_uri = get_token_uri(collection_extend.uri_scheme, collection_extend.uri_content_type, resource_account, collection, name);
+        let tokendata_id = token::create_token_data_id(resource_account, collection, name);
+        token::mutate_tokendata_uri(&resource_account_signer, tokendata_id, token_uri);
+    }
+
     fun get_resource_account_signer(market_address: address): signer acquires ResourceAccountCap {
         let resource_account_cap = borrow_global<ResourceAccountCap>(market_address);
         let resource_signer_from_cap = create_signer_with_capability(&resource_account_cap.cap);
