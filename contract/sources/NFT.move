@@ -824,6 +824,23 @@ module wav3::NFT {
         mutate_once_cap.image_uri = false;
     }
 
+    public fun mutate_token_image_uri_with_mint_cap(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64,
+        _mint_cap: &MintCap
+    ) acquires Collections, ResourceAccountCap {
+        internal_mutate_token_image_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            uri,
+            image_checksum
+        );
+    }
+
     fun internal_mutate_token_image_uri(
         creator_address: address,
         collection_name: String,

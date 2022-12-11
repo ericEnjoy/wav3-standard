@@ -3,10 +3,10 @@
     version = '1.0.1'
 
 [dependencies]
-    AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
-    AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
-    MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
-    AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token", rev="b76f23484df4e370fde053f3833cc2c48c019528"}
+    AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev="testnet"}
+    AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib", rev="testnet"}
+    MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib", rev="testnet"}
+    AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token", rev="testnet"}
 
 
 [addresses]
