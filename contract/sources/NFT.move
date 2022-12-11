@@ -238,6 +238,47 @@ module wav3::NFT {
         MintCap {}
     }
 
+    public entry fun update_uri_scheme(
+        creator: &signer,
+        collection: String,
+        uri_scheme: String
+    ) acquires ResourceAccountCap, Collections {
+        let account_addr = signer::address_of(creator);
+        let resource_account_signer = get_resource_account_signer(account_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let collection_extend_data = &mut collections.collection_extend_data;
+        assert!(
+            table::contains(collection_extend_data, collection),
+            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
+        );
+        let collection_extend = table::borrow_mut(collection_extend_data, collection);
+        collection_extend.uri_scheme = uri_scheme;
+    }
+
+    public entry fun mutate_tokendata_uri(
+        creator: &signer,
+        collection: String,
+        name: String,
+    ) acquires ResourceAccountCap, Collections {
+        let creator_addr = signer::address_of(creator);
+        let resource_account_signer = get_resource_account_signer(creator_addr);
+        let resource_account = signer::address_of(&resource_account_signer);
+        assert!(
+            exists<Collections>(resource_account),
+            error::not_found(ECOLLECTIONS_NOT_PUBLISHED),
+        );
+        let collections = borrow_global_mut<Collections>(resource_account);
+        assert!(
+            table::contains(&collections.collection_extend_data, collection),
+            error::already_exists(ECOLLECTION_NOT_PUBLISHED),
+        );
+        let collection_extend = table::borrow(&collections.collection_extend_data, collection);
+        let token_uri = get_token_uri(collection_extend.uri_scheme, collection_extend.uri_content_type, resource_account, collection, name);
+        let tokendata_id = token::create_token_data_id(resource_account, collection, name);
+        token::mutate_tokendata_uri(&resource_account_signer, tokendata_id, token_uri);
+    }
+
     fun get_resource_account_signer(market_address: address): signer acquires ResourceAccountCap {
         let resource_account_cap = borrow_global<ResourceAccountCap>(market_address);
         let resource_signer_from_cap = create_signer_with_capability(&resource_account_cap.cap);
@@ -811,6 +852,54 @@ module wav3::NFT {
             old_image_uri,
             new_image_uri: uri
         });
+    }
+
+    public entry fun mutate_token_animation_uri(
+        account: &signer,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String,
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        internal_mutate_token_animation_uri(
+            account_addr,
+            collection_name,
+            token_name,
+            animation_uri
+        );
+    }
+
+    public fun mutate_token_animation_uri_with_mint_cap(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String,
+        _mint_cap: &MintCap
+    ) acquires Collections, ResourceAccountCap {
+        internal_mutate_token_animation_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            animation_uri,
+        );
+    }
+
+    fun internal_mutate_token_animation_uri(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String
+    ) acquires Collections, ResourceAccountCap {
+        assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
+        let resource_account_signer = get_resource_account_signer(creator_address);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let token_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let token_extend_data = table::borrow_mut(
+            &mut  collections.token_extend_data, token_id
+        );
+        token_extend_data.animation_uri = animation_uri;
+        token_extend_data.update_block_height = block::get_current_block_height();
     }
 
     public entry fun burn_token_by_creator(
