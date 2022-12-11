@@ -854,6 +854,54 @@ module wav3::NFT {
         });
     }
 
+    public entry fun mutate_token_animation_uri(
+        account: &signer,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String,
+    ) acquires Collections, ResourceAccountCap {
+        let account_addr = signer::address_of(account);
+        internal_mutate_token_animation_uri(
+            account_addr,
+            collection_name,
+            token_name,
+            animation_uri
+        );
+    }
+
+    public fun mutate_token_animation_uri_with_mint_cap(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String,
+        _mint_cap: &MintCap
+    ) acquires Collections, ResourceAccountCap {
+        internal_mutate_token_animation_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            animation_uri,
+        );
+    }
+
+    fun internal_mutate_token_animation_uri(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String
+    ) acquires Collections, ResourceAccountCap {
+        assert!(string::length(&animation_uri) <= MAX_URI_LENGTH, error::invalid_argument(EIMAGE_URI_TOO_LONG));
+        let resource_account_signer = get_resource_account_signer(creator_address);
+        let resource_account = signer::address_of(&resource_account_signer);
+        let collections = borrow_global_mut<Collections>(resource_account);
+        let token_id = token::create_token_data_id(resource_account, collection_name, token_name);
+        let token_extend_data = table::borrow_mut(
+            &mut  collections.token_extend_data, token_id
+        );
+        token_extend_data.animation_uri = animation_uri;
+        token_extend_data.update_block_height = block::get_current_block_height();
+    }
+
     public entry fun burn_token_by_creator(
         account: &signer,
         token_owner: address,
