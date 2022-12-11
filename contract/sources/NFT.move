@@ -29,6 +29,7 @@ module wav3::NFT {
     const EMINT_NOT_MERGABLE: u64 = 12;
     const EFIELD_NOT_MUTABLE: u64 = 13;
     const ENO_MUTATE_CAPABILITY: u64 = 14;
+    const EDEPRECATED: u64 = 15;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -200,42 +201,43 @@ module wav3::NFT {
     }
 
     public fun create_collection_back_mint_cap(
-        account: &signer,
-        name: String,
-        description: String,
-        maximum: u64,
-        mutate_setting: vector<bool>,
-        symbol: String,
-        image_uri: String,
-        animation_uri: String,
-        website: String,
-        standard_version: u64,
-        commercial_standard: String,
-        royalty_policy: String,
-        multi_edtion: bool,
-        mint_mergable: bool,
-        uri_scheme: String,
-        uri_content_type: String
-    ): MintCap acquires Collections, ResourceAccountCap {
-        create_collection(
-            account,
-            name,
-            description,
-            maximum,
-            mutate_setting,
-            symbol,
-            image_uri,
-            animation_uri,
-            website,
-            standard_version,
-            commercial_standard,
-            royalty_policy,
-            multi_edtion,
-            mint_mergable,
-            uri_scheme,
-            uri_content_type
-        );
-        MintCap {}
+        _account: &signer,
+        _name: String,
+        _description: String,
+        _maximum: u64,
+        _mutate_setting: vector<bool>,
+        _symbol: String,
+        _image_uri: String,
+        _animation_uri: String,
+        _website: String,
+        _standard_version: u64,
+        _commercial_standard: String,
+        _royalty_policy: String,
+        _multi_edtion: bool,
+        _mint_mergable: bool,
+        _uri_scheme: String,
+        _uri_content_type: String
+    ): MintCap {
+//        create_collection(
+//            account,
+//            name,
+//            description,
+//            maximum,
+//            mutate_setting,
+//            symbol,
+//            image_uri,
+//            animation_uri,
+//            website,
+//            standard_version,
+//            commercial_standard,
+//            royalty_policy,
+//            multi_edtion,
+//            mint_mergable,
+//            uri_scheme,
+//            uri_content_type
+//        );
+//        MintCap {}
+        abort EDEPRECATED
     }
 
     public entry fun update_uri_scheme(
@@ -468,28 +470,29 @@ module wav3::NFT {
     }
 
     public fun mint_nft_with_cap_back_mutate_cap(
-        account: &signer,
-        creator: address,
-        collection_name: String,
-        token_name: String,
-        property_keys: vector<String>,
-        property_values: vector<vector<u8>>,
-        property_types: vector<String>,
+        _account: &signer,
+        _creator: address,
+        _collection_name: String,
+        _token_name: String,
+        _property_keys: vector<String>,
+        _property_values: vector<vector<u8>>,
+        _property_types: vector<String>,
         _mint_cap: &MintCap
-    ): MutateOnceCap acquires Collections, ResourceAccountCap {
-        internal_mint_nft(
-            account,
-            creator,
-            collection_name,
-            token_name,
-            property_keys,
-            property_values,
-            property_types
-        );
-        MutateOnceCap {
-            image_uri: true,
-            property: true
-        }
+    ): MutateOnceCap {
+//        internal_mint_nft(
+//            account,
+//            creator,
+//            collection_name,
+//            token_name,
+//            property_keys,
+//            property_values,
+//            property_types
+//        );
+//        MutateOnceCap {
+//            image_uri: true,
+//            property: true
+//        }
+        abort EDEPRECATED
     }
 
     public fun mint_nft_with_cap(
