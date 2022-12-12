@@ -30,6 +30,9 @@ module wav3::NFT {
     const EFIELD_NOT_MUTABLE: u64 = 13;
     const ENO_MUTATE_CAPABILITY: u64 = 14;
     const EDEPRECATED: u64 = 15;
+    const ECREATOR_NOT_MATCH: u64 = 16;
+    const ECOLLECTION_NAME_NOT_MATCH: u64 = 17;
+    const ETOKEN_NAME_NOT_MATCH: u64 = 18;
 
     const MAX_URI_LENGTH: u64 = 512;
 
@@ -89,12 +92,27 @@ module wav3::NFT {
         social_media_events: EventHandle<SocialMediaEvent>,
     }
 
+    // Deprecated
     struct MutateOnceCap has drop, store {
         image_uri: bool,
         property: bool
     }
 
+    struct MutateOnceCapV1 has drop, store {
+        creator: address,
+        collection_name: String,
+        token_name: String,
+        image_uri: bool,
+        property: bool
+    }
+
+    // Deprecated
     struct MintCap has drop, store {
+    }
+
+    struct MintCapV1 has drop, store {
+        creator: address,
+        collection_name: String
     }
 
     struct ResourceAccountCap has key {
@@ -240,6 +258,48 @@ module wav3::NFT {
         abort EDEPRECATED
     }
 
+    public fun create_collection_back_mint_cap_v1(
+        account: &signer,
+        name: String,
+        description: String,
+        maximum: u64,
+        mutate_setting: vector<bool>,
+        symbol: String,
+        image_uri: String,
+        animation_uri: String,
+        website: String,
+        standard_version: u64,
+        commercial_standard: String,
+        royalty_policy: String,
+        multi_edtion: bool,
+        mint_mergable: bool,
+        uri_scheme: String,
+        uri_content_type: String
+    ): MintCapV1 acquires Collections, ResourceAccountCap {
+            create_collection(
+                account,
+                name,
+                description,
+                maximum,
+                mutate_setting,
+                symbol,
+                image_uri,
+                animation_uri,
+                website,
+                standard_version,
+                commercial_standard,
+                royalty_policy,
+                multi_edtion,
+                mint_mergable,
+                uri_scheme,
+                uri_content_type
+            );
+            MintCapV1 {
+                creator: signer::address_of(account),
+                collection_name: name
+            }
+    }
+
     public entry fun update_uri_scheme(
         creator: &signer,
         collection: String,
@@ -337,6 +397,47 @@ module wav3::NFT {
         let account_addr = signer::address_of(account);
         internal_create_tokendata(
             account_addr,
+            collection,
+            name,
+            description,
+            maximum,
+            royalty_payee_address,
+            royalty_points_denominator,
+            royalty_points_numerator,
+            token_mutate_config_vec,
+            property_keys,
+            property_values,
+            property_types,
+            image_uri,
+            animation_uri,
+            image_checksum,
+            mutability_config_vec
+        );
+    }
+
+    public fun create_tokendata_with_cap_v1(
+        creator: address,
+        collection: String,
+        name: String,
+        description: String,
+        maximum: u64,
+        royalty_payee_address: address,
+        royalty_points_denominator: u64,
+        royalty_points_numerator: u64,
+        token_mutate_config_vec: vector<bool>,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        image_uri: String,
+        animation_uri: String,
+        image_checksum: u64,
+        mutability_config_vec: vector<bool>,
+        mint_cap: &MintCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mint_cap.creator == creator, ECREATOR_NOT_MATCH);
+        assert!(mint_cap.collection_name == collection, ECOLLECTION_NAME_NOT_MATCH);
+        internal_create_tokendata(
+            creator,
             collection,
             name,
             description,
@@ -495,6 +596,36 @@ module wav3::NFT {
         abort EDEPRECATED
     }
 
+    public fun mint_nft_with_cap_back_mutate_cap_v1(
+        account: &signer,
+        creator: address,
+        collection_name: String,
+        token_name: String,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        mint_cap: &MintCapV1
+    ): MutateOnceCapV1 acquires Collections, ResourceAccountCap {
+        assert!(mint_cap.creator == creator, ECREATOR_NOT_MATCH);
+        assert!(mint_cap.collection_name == collection_name, ECOLLECTION_NAME_NOT_MATCH);
+        internal_mint_nft(
+                account,
+                creator,
+                collection_name,
+                token_name,
+                property_keys,
+                property_values,
+                property_types
+            );
+            MutateOnceCapV1 {
+                creator: mint_cap.creator,
+                collection_name,
+                token_name,
+                image_uri: true,
+                property: true
+            }
+    }
+
     public fun mint_nft_with_cap(
         account: &signer,
         creator: address,
@@ -505,6 +636,29 @@ module wav3::NFT {
         property_types: vector<String>,
         _mint_cap: &MintCap
     ) acquires Collections, ResourceAccountCap {
+        internal_mint_nft(
+            account,
+            creator,
+            collection_name,
+            token_name,
+            property_keys,
+            property_values,
+            property_types
+        );
+    }
+
+    public fun mint_nft_with_cap_v1(
+        account: &signer,
+        creator: address,
+        collection_name: String,
+        token_name: String,
+        property_keys: vector<String>,
+        property_values: vector<vector<u8>>,
+        property_types: vector<String>,
+        mint_cap: &MintCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(creator == mint_cap.creator, ECREATOR_NOT_MATCH);
+        assert!(collection_name == mint_cap.collection_name, ECOLLECTION_NAME_NOT_MATCH);
         internal_mint_nft(
             account,
             creator,
@@ -715,6 +869,36 @@ module wav3::NFT {
         mutate_once_cap.property = false;
     }
 
+    public fun mutate_token_properties_with_cap_v1(
+        creator_address: address,
+        token_owner: address,
+        collection_name: String,
+        token_name: String,
+        token_property_version: u64,
+        amount: u64,
+        keys: vector<String>,
+        values: vector<vector<u8>>,
+        types: vector<String>,
+        mutate_once_cap: &mut MutateOnceCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mutate_once_cap.creator == creator_address, ECREATOR_NOT_MATCH);
+        assert!(mutate_once_cap.collection_name == collection_name, ECOLLECTION_NAME_NOT_MATCH);
+        assert!(mutate_once_cap.token_name == token_name, ETOKEN_NAME_NOT_MATCH);
+        assert!(mutate_once_cap.property, ENO_MUTATE_CAPABILITY);
+        internal_mutate_token_properties(
+            creator_address,
+            token_owner,
+            collection_name,
+            token_name,
+            token_property_version,
+            amount,
+            keys,
+            values,
+            types
+        );
+        mutate_once_cap.property = false;
+    }
+
     fun internal_mutate_token_properties(
         creator_address: address,
         token_owner: address,
@@ -827,6 +1011,28 @@ module wav3::NFT {
         mutate_once_cap.image_uri = false;
     }
 
+    public fun mutate_token_image_uri_with_cap_v1(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64,
+        mutate_once_cap: &mut MutateOnceCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mutate_once_cap.creator == creator_address, ECREATOR_NOT_MATCH);
+        assert!(mutate_once_cap.collection_name == collection_name, ECOLLECTION_NAME_NOT_MATCH);
+        assert!(mutate_once_cap.token_name == token_name, ETOKEN_NAME_NOT_MATCH);
+        assert!(mutate_once_cap.image_uri, ENO_MUTATE_CAPABILITY);
+        internal_mutate_token_image_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            uri,
+            image_checksum
+        );
+        mutate_once_cap.image_uri = false;
+    }
+
     public fun mutate_token_image_uri_with_mint_cap(
         creator_address: address,
         collection_name: String,
@@ -835,6 +1041,25 @@ module wav3::NFT {
         image_checksum: u64,
         _mint_cap: &MintCap
     ) acquires Collections, ResourceAccountCap {
+        internal_mutate_token_image_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            uri,
+            image_checksum
+        );
+    }
+
+    public fun mutate_token_image_uri_with_mint_cap_v1(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        uri: String,
+        image_checksum: u64,
+        mint_cap: &MintCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mint_cap.creator == creator_address, ECREATOR_NOT_MATCH);
+        assert!(mint_cap.collection_name == collection_name, ECOLLECTION_NAME_NOT_MATCH);
         internal_mutate_token_image_uri(
             creator_address,
             collection_name,
@@ -896,6 +1121,23 @@ module wav3::NFT {
         animation_uri: String,
         _mint_cap: &MintCap
     ) acquires Collections, ResourceAccountCap {
+        internal_mutate_token_animation_uri(
+            creator_address,
+            collection_name,
+            token_name,
+            animation_uri,
+        );
+    }
+
+    public fun mutate_token_animation_uri_with_mint_cap_v1(
+        creator_address: address,
+        collection_name: String,
+        token_name: String,
+        animation_uri: String,
+        mint_cap: &MintCapV1
+    ) acquires Collections, ResourceAccountCap {
+        assert!(mint_cap.creator == creator_address, ECREATOR_NOT_MATCH);
+        assert!(mint_cap.collection_name == collection_name, ECOLLECTION_NAME_NOT_MATCH);
         internal_mutate_token_animation_uri(
             creator_address,
             collection_name,
